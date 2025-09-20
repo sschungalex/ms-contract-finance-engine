@@ -43,5 +43,5 @@ public class ErrorResponse {
     /**
      * 详细错误信息
      */
-    private Map<String, Object> details;
+    private Map<String, String> details;
 }
