@@ -1,0 +1,9 @@
+# 命名规范
+## Java代码
+- 实体类以`Entity`结尾，例如`UserEntity`。
+- Repository接口以`Repository`结尾，例如`UserRepository`。
+- Service类以`Service`结尾，例如`UserService`。
+- Controller以`Controller`结尾，路径用复数（如`/users`）。
+## 数据库
+- 表名用全小写、下划线分隔，如`user_profile`。
+- 字段全小写、下划线分隔，如`created_at`、`user_id`。
