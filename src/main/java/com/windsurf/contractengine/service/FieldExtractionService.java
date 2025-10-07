@@ -3,6 +3,7 @@ package com.windsurf.contractengine.service;
 import com.windsurf.contractengine.entity.Contract;
 import com.windsurf.contractengine.entity.ContractField;
 
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
 
@@ -42,7 +43,7 @@ public interface FieldExtractionService {
      * @param extractionMethod 提取方法
      * @return 置信度分数
      */
-    Double calculateConfidenceScore(String fieldValue, String extractionMethod);
+    BigDecimal calculateConfidenceScore(String fieldValue, String extractionMethod);
 
     /**
      * 支持的合同模板类型
