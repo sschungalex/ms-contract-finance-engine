@@ -23,6 +23,7 @@ import org.springframework.web.multipart.MultipartFile;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 /**
@@ -48,10 +49,13 @@ public class ContractServiceImpl implements ContractService {
 
     @Override
     @Transactional(readOnly = true)
-    public ContractListResponse getUploadedContracts(String status, LocalDate startDate,
-                                                     LocalDate endDate, Pageable pageable) {
-        log.info("查询已上传合同列表: status={}, startDate={}, endDate={}, page={}, size={}",
-                status, startDate, endDate, pageable.getPageNumber(), pageable.getPageSize());
+    public ApiResponse<ContractListResponse> getUploadedContracts(Integer page, Integer size,
+                                                                  String status, LocalDate startDate,
+                                                                  LocalDate endDate) {
+        log.info("查询已上传合同列表: page={}, size={}, status={}, startDate={}, endDate={}",
+                page, size, status, startDate, endDate);
+
+        Pageable pageable = getPageable(page, size);
 
         // 解析AI处理状态枚举
         // 如果status为null或空字符串，则aiStatus保持为null，表示查询所有状态
@@ -77,12 +81,31 @@ public class ContractServiceImpl implements ContractService {
                 .map(this::convertToListItemResponse)
                 .collect(Collectors.toList());
 
-        return ContractListResponse.of(
+        ContractListResponse data = ContractListResponse.of(
                 items,
                 pageable.getPageNumber() + 1, // API使用1-based页码
                 pageable.getPageSize(),
                 contractPage.getTotalElements()
         );
+        return ApiResponse.success(data);
+    }
+
+    private static Pageable getPageable(Integer page, Integer size) {
+        // 验证分页参数
+        if (page == null || page < 1) {
+            page = 1;
+        }
+        if (size == null || size < 1 || size > 100) {
+            size = 10;
+        }
+
+        // 创建分页参数，按上传时间倒序排序
+        Pageable pageable = PageRequest.of(
+                page - 1, // Spring Data JPA的页码从0开始
+                size,
+                Sort.by(Sort.Direction.DESC, "uploadTime", "createdAt")
+        );
+        return pageable;
     }
 
     @Override

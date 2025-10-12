@@ -23,14 +23,16 @@ public interface ContractService {
     /**
      * 查询已上传合同列表 (API 1.2)
      * 
+     * @param page 页码（从1开始）
+     * @param size 每页大小
      * @param status 合同状态过滤
      * @param startDate 开始日期
      * @param endDate 结束日期
-     * @param pageable 分页参数
-     * @return 合同列表响应
+     * @return 包含合同列表的API响应
      */
-    ContractListResponse getUploadedContracts(String status, LocalDate startDate, 
-                                              LocalDate endDate, Pageable pageable);
+    ApiResponse<ContractListResponse> getUploadedContracts(Integer page, Integer size,
+                                                           String status, LocalDate startDate, 
+                                                           LocalDate endDate);
 
     /**
      * 分页查询合同列表

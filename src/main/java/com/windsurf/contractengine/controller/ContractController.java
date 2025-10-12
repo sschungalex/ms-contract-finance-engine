@@ -1,7 +1,6 @@
 package com.windsurf.contractengine.controller;
 
 import com.windsurf.contractengine.dto.*;
-import com.windsurf.contractengine.entity.Contract;
 import com.windsurf.contractengine.service.ContractService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -9,9 +8,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
-import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
@@ -21,7 +18,6 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.time.LocalDate;
-import java.util.UUID;
 
 /**
  * 合同管理控制器
@@ -71,29 +67,10 @@ public class ContractController {
         log.info("查询已上传合同列表: page={}, size={}, status={}, startDate={}, endDate={}", 
                 page, size, status, startDate, endDate);
         
-        // 验证分页参数
-        if (page < 1) {
-            page = 1;
-        }
-        if (size < 1 || size > 100) {
-            size = 10;
-        }
+        ApiResponse<ContractListResponse> response = contractService.getUploadedContracts(
+                page, size, status, startDate, endDate);
         
-        // 创建分页参数，按上传时间倒序排序
-        Pageable pageable = PageRequest.of(
-                page - 1, // Spring Data JPA的页码从0开始
-                size,
-                Sort.by(Sort.Direction.DESC, "uploadTime", "createdAt")
-        );
-        
-        // 调用服务层查询
-        ContractListResponse data = contractService.getUploadedContracts(
-                status, startDate, endDate, pageable);
-        
-        // 生成traceId
-        String traceId = "trace-" + UUID.randomUUID().toString().substring(0, 8);
-        
-        return ResponseEntity.ok(ApiResponse.success(data, traceId));
+        return ResponseEntity.ok(response);
     }
 
     /**
@@ -147,10 +124,7 @@ public class ContractController {
         // 调用服务层执行更新
         ContractUpdateResponse data = contractService.updateContract(id, request);
         
-        // 生成traceId
-        String traceId = "trace-" + UUID.randomUUID().toString().substring(0, 8);
-        
-        return ResponseEntity.ok(ApiResponse.success(data, traceId));
+        return ResponseEntity.ok(ApiResponse.success(data));
     }
 
     /**
