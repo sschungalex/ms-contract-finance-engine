@@ -1,6 +1,7 @@
 package com.windsurf.contractengine.dto;
 
-import com.windsurf.contractengine.entity.Contract;
+import com.windsurf.contractengine.enums.ContractStatus;
+import com.windsurf.contractengine.enums.PaymentFrequency;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.*;
 import lombok.Data;
@@ -34,7 +35,7 @@ public class ContractUpdateRequest {
     private LocalDateTime endDate;
 
     @Schema(description = "合同状态", example = "ACTIVE")
-    private Contract.ContractStatus status;
+    private ContractStatus status;
 
     @DecimalMin(value = "0.01", message = "合同总金额必须大于0")
     @Digits(integer = 13, fraction = 2, message = "金额格式不正确")
@@ -46,7 +47,7 @@ public class ContractUpdateRequest {
     private String currency;
 
     @Schema(description = "支付频率", example = "MONTHLY")
-    private Contract.PaymentFrequency paymentFrequency;
+    private PaymentFrequency paymentFrequency;
 
     @Size(max = 50, message = "支付方式长度不能超过50字符")
     @Schema(description = "支付方式", example = "银行转账")

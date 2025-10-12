@@ -4,6 +4,8 @@ import com.windsurf.contractengine.dto.*;
 import org.springframework.data.domain.Pageable;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.time.LocalDate;
+
 /**
  * 合同服务接口
  */
@@ -17,6 +19,18 @@ public interface ContractService {
      * @return 合同响应
      */
     ContractResponse uploadContract(MultipartFile file, ContractCreateRequest request);
+
+    /**
+     * 查询已上传合同列表 (API 1.2)
+     * 
+     * @param status 合同状态过滤
+     * @param startDate 开始日期
+     * @param endDate 结束日期
+     * @param pageable 分页参数
+     * @return 合同列表响应
+     */
+    ContractListResponse getUploadedContracts(String status, LocalDate startDate, 
+                                              LocalDate endDate, Pageable pageable);
 
     /**
      * 分页查询合同列表

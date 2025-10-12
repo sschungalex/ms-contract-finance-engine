@@ -1,5 +1,7 @@
 package com.windsurf.contractengine.entity;
 
+import com.windsurf.contractengine.enums.EntryStatus;
+import com.windsurf.contractengine.enums.EntryType;
 import jakarta.persistence.*;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
@@ -41,10 +43,22 @@ public class JournalEntry {
     private String entryNumber;
 
     /**
+     * 分录ID（API中的entryId）
+     */
+    @Column(name = "entry_id", unique = true, length = 100)
+    private String entryId;
+
+    /**
      * 分录日期
      */
     @Column(name = "entry_date", nullable = false)
     private LocalDate entryDate;
+
+    /**
+     * 记账日期
+     */
+    @Column(name = "booking_date")
+    private LocalDate bookingDate;
 
     /**
      * 分录类型
@@ -60,10 +74,34 @@ public class JournalEntry {
     private String description;
 
     /**
+     * 参考号
+     */
+    @Column(name = "reference", length = 200)
+    private String reference;
+
+    /**
      * 总金额
      */
     @Column(name = "total_amount", nullable = false, precision = 15, scale = 2)
     private BigDecimal totalAmount;
+
+    /**
+     * 借方总金额
+     */
+    @Column(name = "total_dr", precision = 15, scale = 2)
+    private BigDecimal totalDr = BigDecimal.ZERO;
+
+    /**
+     * 贷方总金额
+     */
+    @Column(name = "total_cr", precision = 15, scale = 2)
+    private BigDecimal totalCr = BigDecimal.ZERO;
+
+    /**
+     * 是否平衡
+     */
+    @Column(name = "balanced")
+    private Boolean balanced = false;
 
     /**
      * 分录状态
@@ -115,43 +153,4 @@ public class JournalEntry {
      */
     @OneToMany(mappedBy = "journalEntry", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     private List<JournalEntryLine> entryLines = new ArrayList<>();
-
-    /**
-     * 分录类型枚举
-     */
-    public enum EntryType {
-        PAYMENT("支付分录"),
-        AMORTIZATION("摊销分录"),
-        VARIANCE("差额分录"),
-        ADJUSTMENT("调整分录");
-
-        private final String description;
-
-        EntryType(String description) {
-            this.description = description;
-        }
-
-        public String getDescription() {
-            return description;
-        }
-    }
-
-    /**
-     * 分录状态枚举
-     */
-    public enum EntryStatus {
-        DRAFT("草稿"),
-        POSTED("已过账"),
-        CANCELLED("已取消");
-
-        private final String description;
-
-        EntryStatus(String description) {
-            this.description = description;
-        }
-
-        public String getDescription() {
-            return description;
-        }
-    }
 }

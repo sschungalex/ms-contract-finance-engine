@@ -1,9 +1,7 @@
 package com.windsurf.contractengine.controller;
 
-import com.windsurf.contractengine.dto.ContractCreateRequest;
-import com.windsurf.contractengine.dto.ContractResponse;
-import com.windsurf.contractengine.dto.ContractUpdateRequest;
-import com.windsurf.contractengine.dto.PageResponse;
+import com.windsurf.contractengine.dto.*;
+import com.windsurf.contractengine.entity.Contract;
 import com.windsurf.contractengine.service.ContractService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -11,19 +9,25 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.time.LocalDate;
+import java.util.UUID;
+
 /**
  * 合同管理控制器
  */
 @RestController
-@RequestMapping("/v1/contracts")
+@RequestMapping("/api/contracts")
 @RequiredArgsConstructor
 @Slf4j
 @Tag(name = "合同管理", description = "合同上传、查询、更新等操作")
@@ -48,9 +52,54 @@ public class ContractController {
     }
 
     /**
-     * 获取合同列表
+     * 查询已上传合同列表 (API 1.2)
      */
     @GetMapping
+    @Operation(summary = "查询已上传合同列表", description = "分页查询已上传的合同列表，按上传时间倒序排列")
+    public ResponseEntity<ApiResponse<ContractListResponse>> getUploadedContracts(
+            @Parameter(description = "页码", example = "1")
+            @RequestParam(required = false, defaultValue = "1") Integer page,
+            @Parameter(description = "每页大小", example = "10")
+            @RequestParam(required = false, defaultValue = "10") Integer size,
+            @Parameter(description = "合同状态", example = "COMPLETED")
+            @RequestParam(required = false) String status,
+            @Parameter(description = "开始日期", example = "2025-01-01")
+            @RequestParam(name = "start_date", required = false) @DateTimeFormat(pattern = "yyyy-MM-dd") LocalDate startDate,
+            @Parameter(description = "结束日期", example = "2025-12-31")
+            @RequestParam(name = "end_date", required = false) @DateTimeFormat(pattern = "yyyy-MM-dd") LocalDate endDate) {
+        
+        log.info("查询已上传合同列表: page={}, size={}, status={}, startDate={}, endDate={}", 
+                page, size, status, startDate, endDate);
+        
+        // 验证分页参数
+        if (page < 1) {
+            page = 1;
+        }
+        if (size < 1 || size > 100) {
+            size = 10;
+        }
+        
+        // 创建分页参数，按上传时间倒序排序
+        Pageable pageable = PageRequest.of(
+                page - 1, // Spring Data JPA的页码从0开始
+                size,
+                Sort.by(Sort.Direction.DESC, "uploadTime", "createdAt")
+        );
+        
+        // 调用服务层查询
+        ContractListResponse data = contractService.getUploadedContracts(
+                status, startDate, endDate, pageable);
+        
+        // 生成traceId
+        String traceId = "trace-" + UUID.randomUUID().toString().substring(0, 8);
+        
+        return ResponseEntity.ok(ApiResponse.success(data, traceId));
+    }
+
+    /**
+     * 获取合同列表（旧接口，保留兼容性）
+     */
+    @GetMapping("/list")
     @Operation(summary = "获取合同列表", description = "分页查询合同列表")
     public ResponseEntity<PageResponse<ContractResponse>> getContracts(
             @Parameter(description = "合同类型过滤")

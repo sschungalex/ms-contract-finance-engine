@@ -8,6 +8,7 @@ import org.springframework.data.annotation.LastModifiedDate;
 import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 /**
@@ -38,16 +39,22 @@ public class JournalEntryLine {
     private Integer lineNumber;
 
     /**
-     * 科目代码
+     * 记账日期
      */
-    @Column(name = "account_code", nullable = false, length = 50)
-    private String accountCode;
+    @Column(name = "booking_date")
+    private LocalDate bookingDate;
 
     /**
-     * 科目名称
+     * GL科目代码
      */
-    @Column(name = "account_name", nullable = false, length = 200)
-    private String accountName;
+    @Column(name = "gl_account", length = 50)
+    private String glAccount;
+
+    /**
+     * GL科目名称
+     */
+    @Column(name = "gl_account_name", length = 200)
+    private String glAccountName;
 
     /**
      * 借方金额
@@ -60,6 +67,18 @@ public class JournalEntryLine {
      */
     @Column(name = "credit_amount", precision = 15, scale = 2)
     private BigDecimal creditAmount = BigDecimal.ZERO;
+
+    /**
+     * 录入借方金额
+     */
+    @Column(name = "entered_dr", precision = 15, scale = 2)
+    private BigDecimal enteredDr = BigDecimal.ZERO;
+
+    /**
+     * 录入贷方金额
+     */
+    @Column(name = "entered_cr", precision = 15, scale = 2)
+    private BigDecimal enteredCr = BigDecimal.ZERO;
 
     /**
      * 摘要

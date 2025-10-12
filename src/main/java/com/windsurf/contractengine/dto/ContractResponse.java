@@ -1,6 +1,7 @@
 package com.windsurf.contractengine.dto;
 
-import com.windsurf.contractengine.entity.Contract;
+import com.windsurf.contractengine.enums.ContractStatus;
+import com.windsurf.contractengine.enums.PaymentFrequency;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Data;
 
@@ -36,7 +37,7 @@ public class ContractResponse {
     private LocalDateTime endDate;
 
     @Schema(description = "合同状态", example = "ACTIVE")
-    private Contract.ContractStatus status;
+    private ContractStatus status;
 
     @Schema(description = "合同总金额", example = "100000.00")
     private BigDecimal totalAmount;
@@ -45,7 +46,7 @@ public class ContractResponse {
     private String currency;
 
     @Schema(description = "支付频率", example = "MONTHLY")
-    private Contract.PaymentFrequency paymentFrequency;
+    private PaymentFrequency paymentFrequency;
 
     @Schema(description = "支付方式", example = "银行转账")
     private String paymentMethod;
