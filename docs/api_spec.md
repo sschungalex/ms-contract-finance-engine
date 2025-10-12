@@ -385,7 +385,7 @@ Content-Type: application/json
 
 ---
 
-### 1.4 预付摊销表生成 API
+### 1.5 预付摊销表生成 API
 ```
 GET /api/contracts/{id}/amortization-schedule
 ```
@@ -549,7 +549,7 @@ GET /api/contracts/123/amortization-schedule?generate_mode=AUTO
 
 ---
 
-### 1.5 会计分录生成 API
+### 1.6 会计分录生成 API
 ```
 POST /api/contracts/{id}/journal-entries
 Content-Type: application/json
