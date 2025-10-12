@@ -54,13 +54,13 @@ public interface ContractService {
     ContractResponse getContractById(Long id);
 
     /**
-     * 更新合同信息
+     * 更新合同信息 (API 1.4)
      * 
      * @param id 合同ID
      * @param request 更新请求
-     * @return 更新后的合同信息
+     * @return 更新响应（包含更新字段列表）
      */
-    ContractResponse updateContract(Long id, ContractUpdateRequest request);
+    ContractUpdateResponse updateContract(Long id, ContractUpdateRequest request);
 
     /**
      * 删除合同

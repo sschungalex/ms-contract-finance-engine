@@ -9,6 +9,7 @@ import com.windsurf.contractengine.enums.ContractStatus;
 import com.windsurf.contractengine.exception.ResourceNotFoundException;
 import com.windsurf.contractengine.repository.ContractRepository;
 import com.windsurf.contractengine.service.ContractService;
+import com.windsurf.contractengine.util.ContractUpdateUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -33,6 +34,7 @@ import java.util.stream.Collectors;
 public class ContractServiceImpl implements ContractService {
 
     private final ContractRepository contractRepository;
+    private final ContractUpdateUtil contractUpdateUtil;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Override
@@ -137,14 +139,33 @@ public class ContractServiceImpl implements ContractService {
 
     @Override
     @Transactional
-    public ContractResponse updateContract(Long id, ContractUpdateRequest request) {
+    public ContractUpdateResponse updateContract(Long id, ContractUpdateRequest request) {
         log.info("更新合同信息: id={}", id);
 
         Contract contract = contractRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("合同不存在: " + id));
 
-        // TODO: 实现合同更新逻辑
-        throw new UnsupportedOperationException("更新合同功能待实现");
+        // 检查合同状态是否允许修改
+        if (contract.getStatus() == ContractStatus.CANCELLED || 
+            contract.getStatus() == ContractStatus.TERMINATED) {
+            throw new IllegalStateException("合同状态不允许修改: " + contract.getStatus());
+        }
+
+        List<String> updatedFields = contractUpdateUtil.updateContractFields(contract, request);
+        contractUpdateUtil.updateComplexFields(contract, request, updatedFields);
+
+        // 保存更新后的合同
+        Contract updatedContract = contractRepository.save(contract);
+        log.info("合同更新成功: id={}, updatedAt={}, updatedFields={}", 
+                updatedContract.getId(), updatedContract.getUpdatedAt(), updatedFields);
+
+        // 构建并返回更新响应
+        return ContractUpdateResponse.builder()
+                .contractId(updatedContract.getId())
+                .message("合同数据更新成功")
+                .updatedTime(updatedContract.getUpdatedAt())
+                .updatedFields(updatedFields)
+                .build();
     }
 
     @Override
@@ -334,4 +355,6 @@ public class ContractServiceImpl implements ContractService {
             log.warn("解析合同JSON字段失败: contractId={}, error={}", contract.getId(), e.getMessage());
         }
     }
+
+    // 工具方法已移至 ContractUpdateUtil 类，简化了验空逻辑
 }
