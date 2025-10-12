@@ -184,17 +184,17 @@ public class ContractController {
     }
 
     /**
-     * 生成摊销计划
+     * 生成并获取摊销计划 (API 1.5)
      */
-    @PostMapping("/{id}/amortization-schedule")
-    @Operation(summary = "生成摊销计划", description = "根据合同信息生成摊销时间表")
-    public ResponseEntity<Void> generateAmortizationSchedule(
+    @GetMapping("/{id}/amortization-schedule")
+    @Operation(summary = "预付摊销表生成", description = "根据合同信息生成并返回预付摊销表，包含摊销明细、汇总信息和计算依据")
+    public ResponseEntity<ApiResponse<AmortizationScheduleResponse>> generateAmortizationSchedule(
             @Parameter(description = "合同ID", required = true)
             @PathVariable Long id) {
         
         log.info("生成摊销计划: id={}", id);
-        contractService.generateAmortizationSchedule(id);
-        return ResponseEntity.accepted().build();
+        AmortizationScheduleResponse data = contractService.generateAmortizationSchedule(id);
+        return ResponseEntity.ok(ApiResponse.success(data));
     }
 
     /**

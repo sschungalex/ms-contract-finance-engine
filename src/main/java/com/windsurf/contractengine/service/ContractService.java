@@ -94,11 +94,13 @@ public interface ContractService {
     void generatePaymentSchedule(Long id);
 
     /**
-     * 生成摊销计划
+     * 生成并获取摊销计划 (API 1.5)
+     * 根据合同信息生成并返回预付摊销表
      * 
      * @param id 合同ID
+     * @return 摊销计划响应
      */
-    void generateAmortizationSchedule(Long id);
+    AmortizationScheduleResponse generateAmortizationSchedule(Long id);
 
     /**
      * 获取所有计划
