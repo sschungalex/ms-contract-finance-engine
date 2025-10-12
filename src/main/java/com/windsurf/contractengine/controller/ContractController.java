@@ -111,23 +111,26 @@ public class ContractController {
             @PageableDefault(size = 20) Pageable pageable) {
         
         log.info("查询合同列表: type={}, status={}, keyword={}", contractType, status, keyword);
+
+        log.info("查询合同列表: type={}, status={}, keyword={}", contractType, status, keyword);
         PageResponse<ContractResponse> response = contractService.getContracts(
                 contractType, status, keyword, pageable);
         return ResponseEntity.ok(response);
     }
 
     /**
-     * 获取合同详情
+     * 获取合同详情 (API 1.3)
      */
     @GetMapping("/{id}")
-    @Operation(summary = "获取合同详情", description = "根据ID获取合同详细信息")
-    public ResponseEntity<ContractResponse> getContract(
+    @Operation(summary = "查询合同详情", description = "根据合同ID查询完整的合同详细信息，包含AI提取的结构化数据")
+    public ResponseEntity<ApiResponse<ContractResponse>> getContractDetail(
             @Parameter(description = "合同ID", required = true)
             @PathVariable Long id) {
-        
+
         log.info("查询合同详情: id={}", id);
-        ContractResponse response = contractService.getContractById(id);
-        return ResponseEntity.ok(response);
+        ContractResponse data = contractService.getContractById(id);
+
+        return ResponseEntity.ok(ApiResponse.success(data));
     }
 
     /**
@@ -140,7 +143,7 @@ public class ContractController {
             @PathVariable Long id,
             @Parameter(description = "更新信息", required = true)
             @Valid @RequestBody ContractUpdateRequest request) {
-        
+
         log.info("更新合同信息: id={}", id);
         ContractResponse response = contractService.updateContract(id, request);
         return ResponseEntity.ok(response);

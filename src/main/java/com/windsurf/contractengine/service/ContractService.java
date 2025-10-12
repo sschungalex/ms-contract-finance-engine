@@ -45,10 +45,11 @@ public interface ContractService {
                                                String keyword, Pageable pageable);
 
     /**
-     * 根据ID获取合同详情
+     * 根据ID获取合同详情 (API 1.3)
+     * 包含AI提取的结构化数据，用于编辑表单回显
      * 
      * @param id 合同ID
-     * @return 合同详情
+     * @return 合同完整详情
      */
     ContractResponse getContractById(Long id);
 

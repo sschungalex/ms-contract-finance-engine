@@ -1,5 +1,7 @@
 package com.windsurf.contractengine.service.impl;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.windsurf.contractengine.dto.*;
 import com.windsurf.contractengine.entity.Contract;
 import com.windsurf.contractengine.enums.AIProcessingStatus;
@@ -18,6 +20,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -30,6 +33,7 @@ import java.util.stream.Collectors;
 public class ContractServiceImpl implements ContractService {
 
     private final ContractRepository contractRepository;
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Override
     @Transactional
@@ -123,7 +127,7 @@ public class ContractServiceImpl implements ContractService {
     @Override
     @Transactional(readOnly = true)
     public ContractResponse getContractById(Long id) {
-        log.info("查询合同详情: id={}", id);
+        log.info("查询合同完整详情: id={}", id);
 
         Contract contract = contractRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("合同不存在: " + id));
@@ -211,26 +215,53 @@ public class ContractServiceImpl implements ContractService {
 
     /**
      * 转换合同实体为响应DTO
+     * 包含AI提取的结构化数据
      */
     private ContractResponse convertToResponse(Contract contract) {
         ContractResponse response = new ContractResponse();
+
+        // 基本信息
         response.setId(contract.getId());
         response.setContractNumber(contract.getContractNumber());
         response.setContractName(contract.getContractName());
         response.setContractType(contract.getContractType());
         response.setCounterparty(contract.getCounterparty());
-        response.setStartDate(contract.getStartDate());
-        response.setEndDate(contract.getEndDate());
         response.setStatus(contract.getStatus());
+        response.setAiProcessingStatus(contract.getAiProcessingStatus());
+        response.setAiConfidence(contract.getAiConfidence());
+        response.setOriginalFilename(contract.getOriginalFilename());
+        response.setFileSize(contract.getFileSize());
+        response.setUploadTime(contract.getUploadTime());
+
+        // 财务信息
+        response.setPaymentMethod(contract.getPaymentMethod());
         response.setTotalAmount(contract.getTotalAmount());
         response.setCurrency(contract.getCurrency());
         response.setPaymentFrequency(contract.getPaymentFrequency());
-        response.setPaymentMethod(contract.getPaymentMethod());
-        response.setOriginalFilename(contract.getOriginalFilename());
-        response.setFileSize(contract.getFileSize());
+        response.setTaxRate(contract.getTaxRate());
+        response.setRemarks(contract.getRemarks());
+
+        // 日期信息
+        response.setContractDate(contract.getContractDate());
+        response.setStartDate(contract.getStartDate() != null ? contract.getStartDate().toLocalDate() : null);
+        response.setEndDate(contract.getEndDate() != null ? contract.getEndDate().toLocalDate() : null);
+
+        // 服务信息
+        response.setUnitPrice(contract.getUnitPrice());
+        response.setQuantity(contract.getQuantity());
+        response.setServicePeriodType(contract.getServicePeriodType() != null ?
+                contract.getServicePeriodType().name() : null);
+        response.setServiceDuration(contract.getServiceDuration());
+        response.setServiceDescription(contract.getServiceDescription());
+
+        // 审计信息
         response.setCreatedAt(contract.getCreatedAt());
         response.setUpdatedAt(contract.getUpdatedAt());
         response.setCreatedBy(contract.getCreatedBy());
+
+        // 解析JSON字段
+        parseJsonFields(contract, response);
+
         return response;
     }
 
@@ -257,5 +288,50 @@ public class ContractServiceImpl implements ContractService {
         response.setPaymentMethod(contract.getPaymentMethod());
 
         return response;
+    }
+
+    /**
+     * 解析合同实体中的JSON字段
+     */
+    private void parseJsonFields(Contract contract, ContractResponse response) {
+        try {
+            // 解析付款日期列表
+            if (contract.getPaymentDates() != null && !contract.getPaymentDates().isEmpty()) {
+                List<LocalDate> paymentDates = objectMapper.readValue(
+                        contract.getPaymentDates(),
+                        new TypeReference<List<LocalDate>>() {}
+                );
+                response.setPaymentDates(paymentDates);
+            }
+
+            // 解析合同当事方
+            if (contract.getParties() != null && !contract.getParties().isEmpty()) {
+                List<String> parties = objectMapper.readValue(
+                        contract.getParties(),
+                        new TypeReference<List<String>>() {}
+                );
+                response.setParties(parties);
+            }
+
+            // 解析金额要素
+            if (contract.getAmountElements() != null && !contract.getAmountElements().isEmpty()) {
+                ContractResponse.AmountElements amountElements = objectMapper.readValue(
+                        contract.getAmountElements(),
+                        ContractResponse.AmountElements.class
+                );
+                response.setAmountElements(amountElements);
+            }
+
+            // 解析时间要素
+            if (contract.getTimeElements() != null && !contract.getTimeElements().isEmpty()) {
+                ContractResponse.TimeElements timeElements = objectMapper.readValue(
+                        contract.getTimeElements(),
+                        ContractResponse.TimeElements.class
+                );
+                response.setTimeElements(timeElements);
+            }
+        } catch (Exception e) {
+            log.warn("解析合同JSON字段失败: contractId={}, error={}", contract.getId(), e.getMessage());
+        }
     }
 }
