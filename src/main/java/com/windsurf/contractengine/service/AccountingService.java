@@ -1,6 +1,7 @@
 package com.windsurf.contractengine.service;
 
 import com.windsurf.contractengine.entity.*;
+import com.windsurf.contractengine.enums.EntryType;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -73,7 +74,7 @@ public interface AccountingService {
      * @param entryType 分录类型
      * @return 分录规则配置
      */
-    Map<String, Object> getAccountingRules(String contractType, JournalEntry.EntryType entryType);
+    Map<String, Object> getAccountingRules(String contractType, EntryType entryType);
 
     /**
      * 生成分录编号
@@ -81,7 +82,7 @@ public interface AccountingService {
      * @param entryType 分录类型
      * @return 分录编号
      */
-    String generateEntryNumber(JournalEntry.EntryType entryType);
+    String generateEntryNumber(EntryType entryType);
 
     /**
      * 创建分录明细行

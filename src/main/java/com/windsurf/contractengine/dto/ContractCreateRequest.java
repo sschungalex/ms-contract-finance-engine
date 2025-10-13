@@ -1,6 +1,6 @@
 package com.windsurf.contractengine.dto;
 
-import com.windsurf.contractengine.entity.Contract;
+import com.windsurf.contractengine.enums.PaymentFrequency;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.*;
 import lombok.Data;
@@ -50,7 +50,7 @@ public class ContractCreateRequest {
 
     @NotNull(message = "支付频率不能为空")
     @Schema(description = "支付频率", example = "MONTHLY")
-    private Contract.PaymentFrequency paymentFrequency;
+    private PaymentFrequency paymentFrequency;
 
     @Size(max = 50, message = "支付方式长度不能超过50字符")
     @Schema(description = "支付方式", example = "银行转账")

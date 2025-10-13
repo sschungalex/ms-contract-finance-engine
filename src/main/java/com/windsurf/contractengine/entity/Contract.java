@@ -1,5 +1,6 @@
 package com.windsurf.contractengine.entity;
 
+import com.windsurf.contractengine.enums.*;
 import jakarta.persistence.*;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
@@ -8,6 +9,7 @@ import org.springframework.data.annotation.LastModifiedDate;
 import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -51,6 +53,12 @@ public class Contract {
     private String counterparty;
 
     /**
+     * 合同签订日期
+     */
+    @Column(name = "contract_date")
+    private LocalDate contractDate;
+
+    /**
      * 合同开始日期
      */
     @Column(name = "start_date", nullable = false)
@@ -68,6 +76,25 @@ public class Contract {
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false)
     private ContractStatus status = ContractStatus.DRAFT;
+
+    /**
+     * AI处理状态
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "ai_processing_status")
+    private AIProcessingStatus aiProcessingStatus = AIProcessingStatus.PROCESSING;
+
+    /**
+     * 文件上传时间
+     */
+    @Column(name = "upload_time")
+    private LocalDateTime uploadTime;
+
+    /**
+     * AI置信度
+     */
+    @Column(name = "ai_confidence", precision = 5, scale = 4)
+    private BigDecimal aiConfidence;
 
     /**
      * 合同总金额
@@ -93,6 +120,73 @@ public class Contract {
      */
     @Column(name = "payment_method", length = 50)
     private String paymentMethod;
+
+    /**
+     * 税率
+     */
+    @Column(name = "tax_rate", precision = 5, scale = 2)
+    private BigDecimal taxRate;
+
+    /**
+     * 付款日期列表（JSON格式）
+     */
+    @Column(name = "payment_dates", columnDefinition = "TEXT")
+    private String paymentDates;
+
+    /**
+     * 合同当事方（JSON格式）
+     */
+    @Column(name = "parties", columnDefinition = "TEXT")
+    private String parties;
+
+    /**
+     * 金额要素（JSON格式）
+     */
+    @Column(name = "amount_elements", columnDefinition = "TEXT")
+    private String amountElements;
+
+    /**
+     * 时间要素（JSON格式）
+     */
+    @Column(name = "time_elements", columnDefinition = "TEXT")
+    private String timeElements;
+
+    /**
+     * 单价
+     */
+    @Column(name = "unit_price", precision = 15, scale = 2)
+    private BigDecimal unitPrice;
+
+    /**
+     * 数量
+     */
+    @Column(name = "quantity")
+    private Integer quantity;
+
+    /**
+     * 服务周期类型
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "service_period_type")
+    private ServicePeriodType servicePeriodType;
+
+    /**
+     * 服务持续时长
+     */
+    @Column(name = "service_duration")
+    private Integer serviceDuration;
+
+    /**
+     * 服务描述
+     */
+    @Column(name = "service_description", length = 500)
+    private String serviceDescription;
+
+    /**
+     * 备注
+     */
+    @Column(name = "remarks", length = 500)
+    private String remarks;
 
     /**
      * 原始文件名
@@ -161,45 +255,4 @@ public class Contract {
      */
     @OneToMany(mappedBy = "contract", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     private List<JournalEntry> journalEntries = new ArrayList<>();
-
-    /**
-     * 合同状态枚举
-     */
-    public enum ContractStatus {
-        DRAFT("草稿"),
-        ACTIVE("生效"),
-        EXPIRED("过期"),
-        TERMINATED("终止");
-
-        private final String description;
-
-        ContractStatus(String description) {
-            this.description = description;
-        }
-
-        public String getDescription() {
-            return description;
-        }
-    }
-
-    /**
-     * 支付频率枚举
-     */
-    public enum PaymentFrequency {
-        MONTHLY("月付"),
-        QUARTERLY("季付"),
-        SEMI_ANNUALLY("半年付"),
-        ANNUALLY("年付"),
-        ONE_TIME("一次性");
-
-        private final String description;
-
-        PaymentFrequency(String description) {
-            this.description = description;
-        }
-
-        public String getDescription() {
-            return description;
-        }
-    }
 }

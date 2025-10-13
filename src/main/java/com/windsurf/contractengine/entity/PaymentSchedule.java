@@ -1,5 +1,6 @@
 package com.windsurf.contractengine.entity;
 
+import com.windsurf.contractengine.enums.PaymentStatus;
 import jakarta.persistence.*;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
@@ -63,6 +64,18 @@ public class PaymentSchedule {
     private BigDecimal actualAmount;
 
     /**
+     * 支付方式
+     */
+    @Column(name = "payment_method", length = 100)
+    private String paymentMethod;
+
+    /**
+     * 支付描述
+     */
+    @Column(name = "payment_description", length = 500)
+    private String paymentDescription;
+
+    /**
      * 支付状态
      */
     @Enumerated(EnumType.STRING)
@@ -94,25 +107,4 @@ public class PaymentSchedule {
     @LastModifiedDate
     @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt;
-
-    /**
-     * 支付状态枚举
-     */
-    public enum PaymentStatus {
-        PENDING("待支付"),
-        PAID("已支付"),
-        OVERDUE("逾期"),
-        PARTIAL("部分支付"),
-        CANCELLED("已取消");
-
-        private final String description;
-
-        PaymentStatus(String description) {
-            this.description = description;
-        }
-
-        public String getDescription() {
-            return description;
-        }
-    }
 }

@@ -1,9 +1,6 @@
 package com.windsurf.contractengine.controller;
 
-import com.windsurf.contractengine.dto.ContractCreateRequest;
-import com.windsurf.contractengine.dto.ContractResponse;
-import com.windsurf.contractengine.dto.ContractUpdateRequest;
-import com.windsurf.contractengine.dto.PageResponse;
+import com.windsurf.contractengine.dto.*;
 import com.windsurf.contractengine.service.ContractService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -13,17 +10,20 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.time.LocalDate;
+
 /**
  * 合同管理控制器
  */
 @RestController
-@RequestMapping("/v1/contracts")
+@RequestMapping("/api/contracts")
 @RequiredArgsConstructor
 @Slf4j
 @Tag(name = "合同管理", description = "合同上传、查询、更新等操作")
@@ -48,9 +48,35 @@ public class ContractController {
     }
 
     /**
-     * 获取合同列表
+     * 查询已上传合同列表 (API 1.2)
      */
     @GetMapping
+    @Operation(summary = "查询已上传合同列表", description = "分页查询已上传的合同列表，按上传时间倒序排列")
+    public ResponseEntity<ApiResponse<ContractListResponse>> getUploadedContracts(
+            @Parameter(description = "页码", example = "1")
+            @RequestParam(required = false, defaultValue = "1") Integer page,
+            @Parameter(description = "每页大小", example = "10")
+            @RequestParam(required = false, defaultValue = "10") Integer size,
+            @Parameter(description = "合同状态", example = "COMPLETED")
+            @RequestParam(required = false) String status,
+            @Parameter(description = "开始日期", example = "2025-01-01")
+            @RequestParam(name = "start_date", required = false) @DateTimeFormat(pattern = "yyyy-MM-dd") LocalDate startDate,
+            @Parameter(description = "结束日期", example = "2025-12-31")
+            @RequestParam(name = "end_date", required = false) @DateTimeFormat(pattern = "yyyy-MM-dd") LocalDate endDate) {
+        
+        log.info("查询已上传合同列表: page={}, size={}, status={}, startDate={}, endDate={}", 
+                page, size, status, startDate, endDate);
+        
+        ApiResponse<ContractListResponse> response = contractService.getUploadedContracts(
+                page, size, status, startDate, endDate);
+        
+        return ResponseEntity.ok(response);
+    }
+
+    /**
+     * 获取合同列表（旧接口，保留兼容性）
+     */
+    @GetMapping("/list")
     @Operation(summary = "获取合同列表", description = "分页查询合同列表")
     public ResponseEntity<PageResponse<ContractResponse>> getContracts(
             @Parameter(description = "合同类型过滤")
@@ -68,33 +94,37 @@ public class ContractController {
     }
 
     /**
-     * 获取合同详情
+     * 获取合同详情 (API 1.3)
      */
     @GetMapping("/{id}")
-    @Operation(summary = "获取合同详情", description = "根据ID获取合同详细信息")
-    public ResponseEntity<ContractResponse> getContract(
+    @Operation(summary = "查询合同详情", description = "根据合同ID查询完整的合同详细信息，包含AI提取的结构化数据")
+    public ResponseEntity<ApiResponse<ContractResponse>> getContractDetail(
             @Parameter(description = "合同ID", required = true)
             @PathVariable Long id) {
-        
+
         log.info("查询合同详情: id={}", id);
-        ContractResponse response = contractService.getContractById(id);
-        return ResponseEntity.ok(response);
+        ContractResponse data = contractService.getContractById(id);
+
+        return ResponseEntity.ok(ApiResponse.success(data));
     }
 
     /**
-     * 更新合同信息
+     * 更新合同信息 (API 1.4 数据修正编辑)
      */
     @PutMapping("/{id}")
-    @Operation(summary = "更新合同信息", description = "更新合同基本信息")
-    public ResponseEntity<ContractResponse> updateContract(
+    @Operation(summary = "数据修正编辑", description = "更新合同数据，支持修正AI提取的字段")
+    public ResponseEntity<ApiResponse<ContractUpdateResponse>> updateContract(
             @Parameter(description = "合同ID", required = true)
             @PathVariable Long id,
             @Parameter(description = "更新信息", required = true)
             @Valid @RequestBody ContractUpdateRequest request) {
-        
+
         log.info("更新合同信息: id={}", id);
-        ContractResponse response = contractService.updateContract(id, request);
-        return ResponseEntity.ok(response);
+        
+        // 调用服务层执行更新
+        ContractUpdateResponse data = contractService.updateContract(id, request);
+        
+        return ResponseEntity.ok(ApiResponse.success(data));
     }
 
     /**
@@ -154,17 +184,17 @@ public class ContractController {
     }
 
     /**
-     * 生成摊销计划
+     * 生成并获取摊销计划 (API 1.5)
      */
-    @PostMapping("/{id}/amortization-schedule")
-    @Operation(summary = "生成摊销计划", description = "根据合同信息生成摊销时间表")
-    public ResponseEntity<Void> generateAmortizationSchedule(
+    @GetMapping("/{id}/amortization-schedule")
+    @Operation(summary = "预付摊销表生成", description = "根据合同信息生成并返回预付摊销表，包含摊销明细、汇总信息和计算依据")
+    public ResponseEntity<ApiResponse<AmortizationScheduleResponse>> generateAmortizationSchedule(
             @Parameter(description = "合同ID", required = true)
             @PathVariable Long id) {
         
         log.info("生成摊销计划: id={}", id);
-        contractService.generateAmortizationSchedule(id);
-        return ResponseEntity.accepted().build();
+        AmortizationScheduleResponse data = contractService.generateAmortizationSchedule(id);
+        return ResponseEntity.ok(ApiResponse.success(data));
     }
 
     /**

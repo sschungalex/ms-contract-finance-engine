@@ -1,5 +1,6 @@
 package com.windsurf.contractengine.entity;
 
+import com.windsurf.contractengine.enums.AmortizationStatus;
 import jakarta.persistence.*;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
@@ -39,6 +40,24 @@ public class AmortizationSchedule {
     private Integer periodNumber;
 
     /**
+     * 预提/摊销期间
+     */
+    @Column(name = "period", length = 20)
+    private String period;
+
+    /**
+     * 预提期间详细描述
+     */
+    @Column(name = "accrual_period", length = 100)
+    private String accrualPeriod;
+
+    /**
+     * 入账期间
+     */
+    @Column(name = "accounting_period", length = 20)
+    private String accountingPeriod;
+
+    /**
      * 摊销日期
      */
     @Column(name = "amortization_date", nullable = false)
@@ -70,6 +89,18 @@ public class AmortizationSchedule {
     private AmortizationStatus status = AmortizationStatus.PENDING;
 
     /**
+     * 生成时间
+     */
+    @Column(name = "generated_time")
+    private LocalDateTime generatedTime;
+
+    /**
+     * 计算依据（JSON格式）
+     */
+    @Column(name = "calculation_basis", columnDefinition = "TEXT")
+    private String calculationBasis;
+
+    /**
      * 备注
      */
     @Column(name = "remarks", length = 500)
@@ -88,23 +119,4 @@ public class AmortizationSchedule {
     @LastModifiedDate
     @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt;
-
-    /**
-     * 摊销状态枚举
-     */
-    public enum AmortizationStatus {
-        PENDING("待摊销"),
-        PROCESSED("已摊销"),
-        CANCELLED("已取消");
-
-        private final String description;
-
-        AmortizationStatus(String description) {
-            this.description = description;
-        }
-
-        public String getDescription() {
-            return description;
-        }
-    }
 }

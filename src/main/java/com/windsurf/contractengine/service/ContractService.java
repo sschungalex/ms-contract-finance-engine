@@ -4,6 +4,8 @@ import com.windsurf.contractengine.dto.*;
 import org.springframework.data.domain.Pageable;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.time.LocalDate;
+
 /**
  * 合同服务接口
  */
@@ -19,6 +21,20 @@ public interface ContractService {
     ContractResponse uploadContract(MultipartFile file, ContractCreateRequest request);
 
     /**
+     * 查询已上传合同列表 (API 1.2)
+     * 
+     * @param page 页码（从1开始）
+     * @param size 每页大小
+     * @param status 合同状态过滤
+     * @param startDate 开始日期
+     * @param endDate 结束日期
+     * @return 包含合同列表的API响应
+     */
+    ApiResponse<ContractListResponse> getUploadedContracts(Integer page, Integer size,
+                                                           String status, LocalDate startDate, 
+                                                           LocalDate endDate);
+
+    /**
      * 分页查询合同列表
      * 
      * @param contractType 合同类型过滤
@@ -31,21 +47,22 @@ public interface ContractService {
                                                String keyword, Pageable pageable);
 
     /**
-     * 根据ID获取合同详情
+     * 根据ID获取合同详情 (API 1.3)
+     * 包含AI提取的结构化数据，用于编辑表单回显
      * 
      * @param id 合同ID
-     * @return 合同详情
+     * @return 合同完整详情
      */
     ContractResponse getContractById(Long id);
 
     /**
-     * 更新合同信息
+     * 更新合同信息 (API 1.4)
      * 
      * @param id 合同ID
      * @param request 更新请求
-     * @return 更新后的合同信息
+     * @return 更新响应（包含更新字段列表）
      */
-    ContractResponse updateContract(Long id, ContractUpdateRequest request);
+    ContractUpdateResponse updateContract(Long id, ContractUpdateRequest request);
 
     /**
      * 删除合同
@@ -77,11 +94,13 @@ public interface ContractService {
     void generatePaymentSchedule(Long id);
 
     /**
-     * 生成摊销计划
+     * 生成并获取摊销计划 (API 1.5)
+     * 根据合同信息生成并返回预付摊销表
      * 
      * @param id 合同ID
+     * @return 摊销计划响应
      */
-    void generateAmortizationSchedule(Long id);
+    AmortizationScheduleResponse generateAmortizationSchedule(Long id);
 
     /**
      * 获取所有计划

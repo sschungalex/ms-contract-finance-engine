@@ -143,7 +143,102 @@ GET /api/contracts?page=1&size=10&status=COMPLETED&start_date=2025-01-01&end_dat
 
 ---
 
-### 1.3 数据修正编辑
+### 1.3 查询合同详情
+```
+GET /api/contracts/{id}
+```
+
+#### 路径参数
+| 参数名 | 类型 | 必填 | 说明 | 约束 |
+|--------|------|------|------|------|
+| id | Long | 是 | 合同ID | 大于0的整数 |
+
+#### 请求示例
+```
+GET /api/contracts/123
+```
+
+#### 成功响应 (HTTP 200)
+```json
+{
+  "code": 0,
+  "message": "success",
+  "data": {
+    "contractId": 123,
+    "contractNumber": "CT202401001",
+    "contractName": "软件开发服务合同",
+    "contractType": "服务合同",
+    "counterparty": "ABC科技有限公司",
+    "status": "ACTIVE",
+    "aiProcessingStatus": "COMPLETED",
+    "aiConfidence": 0.95,
+    "originalFileName": "contract_abc.pdf",
+    "uploadTime": "2025-01-01T10:00:00Z",
+    "paymentMethod": "银行转账",
+    "totalAmount": 100000.00,
+    "currency": "CNY",
+    "paymentFrequency": "MONTHLY",
+    "paymentDates": ["2025-01-01", "2025-03-01", "2025-06-01"],
+    "taxRate": 6.00,
+    "remarks": "备注信息",
+    "contractDate": "2025-01-01",
+    "parties": ["甲方公司", "乙方公司"],
+    "amountElements": {
+      "totalAmount": 100000.00,
+      "unitPrice": 5000.00,
+      "quantity": 20
+    },
+    "timeElements": {
+      "servicePeriod": {
+        "type": "MONTHLY",
+        "duration": 12,
+        "description": "按月服务，共12个月"
+      },
+      "deliveryNodes": [
+        {
+          "milestone": "项目启动",
+          "percentage": 30,
+          "dueDate": "2025-01-15"
+        },
+        {
+          "milestone": "中期交付",
+          "percentage": 40,
+          "dueDate": "2025-06-15"
+        },
+        {
+          "milestone": "项目完成",
+          "percentage": 30,
+          "dueDate": "2025-12-15"
+        }
+      ]
+    },
+    "unitPrice": 5000.00,
+    "quantity": 20,
+    "servicePeriodType": "MONTHLY",
+    "serviceDuration": 12,
+    "serviceDescription": "按月服务，共12个月",
+    "startDate": "2025-01-01",
+    "endDate": "2025-12-31",
+    "createdAt": "2025-01-01T10:00:00Z",
+    "updatedAt": "2025-01-01T10:30:00Z",
+    "createdBy": "张三"
+  },
+  "traceId": "trace-123456"
+}
+```
+
+#### 响应字段说明
+响应数据使用统一的ContractResponse对象，包含合同的所有详细信息（包括AI提取的结构化数据），与1.4数据修正编辑的请求字段基本一致，便于前端直接用于编辑表单的数据回显。
+
+#### 错误响应
+| HTTP状态码 | 错误码 | 说明 |
+|-----------|--------|------|
+| 404 | 40401 | 合同不存在 |
+| 500 | 50003 | 查询异常 |
+
+---
+
+### 1.4 数据修正编辑
 ```
 PUT /api/contracts/{id}
 Content-Type: application/json
@@ -290,7 +385,7 @@ Content-Type: application/json
 
 ---
 
-### 1.4 预付摊销表生成 API
+### 1.5 预付摊销表生成 API
 ```
 GET /api/contracts/{id}/amortization-schedule
 ```
@@ -454,7 +549,7 @@ GET /api/contracts/123/amortization-schedule?generate_mode=AUTO
 
 ---
 
-### 1.5 会计分录生成 API
+### 1.6 会计分录生成 API
 ```
 POST /api/contracts/{id}/journal-entries
 Content-Type: application/json

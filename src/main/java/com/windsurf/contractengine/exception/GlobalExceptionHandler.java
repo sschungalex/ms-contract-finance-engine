@@ -130,6 +130,21 @@ public class GlobalExceptionHandler {
     }
 
     /**
+     * 处理非法状态异常 (合同状态不允许修改等)
+     */
+    @ExceptionHandler(IllegalStateException.class)
+    public ResponseEntity<ErrorResponse> handleIllegalStateException(IllegalStateException e) {
+        log.warn("非法状态: {}", e.getMessage());
+        ErrorResponse error = ErrorResponse.builder()
+                .timestamp(LocalDateTime.now())
+                .status(HttpStatus.CONFLICT.value())
+                .error("Conflict")
+                .message(e.getMessage())
+                .build();
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(error);
+    }
+
+    /**
      * 处理其他未知异常
      */
     @ExceptionHandler(Exception.class)
