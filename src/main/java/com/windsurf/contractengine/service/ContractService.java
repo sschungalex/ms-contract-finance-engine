@@ -111,9 +111,21 @@ public interface ContractService {
     Object getSchedules(Long id);
 
     /**
-     * 生成会计分录
+     * 生成会计分录 (API 1.6)
+     * 根据合同信息和实际付款情况生成会计分录
      * 
      * @param id 合同ID
+     * @param request 会计分录生成请求
+     * @return 会计分录生成响应
      */
-    void generateJournalEntries(Long id);
+    JournalEntryGenerationResponse generateJournalEntries(Long id, JournalEntryGenerationRequest request);
+
+    /**
+     * 查询合同会计分录
+     * 根据合同ID查询所有相关的会计分录
+     * 
+     * @param id 合同ID
+     * @return 会计分录查询响应
+     */
+    JournalEntryQueryResponse getJournalEntriesByContractId(Long id);
 }

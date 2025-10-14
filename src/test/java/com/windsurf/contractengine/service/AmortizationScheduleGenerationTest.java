@@ -7,7 +7,10 @@ import com.windsurf.contractengine.entity.Contract;
 import com.windsurf.contractengine.enums.AmortizationStrategy;
 import com.windsurf.contractengine.enums.ServicePeriodType;
 import com.windsurf.contractengine.exception.ResourceNotFoundException;
+import com.windsurf.contractengine.repository.AmortizationScheduleRepository;
 import com.windsurf.contractengine.repository.ContractRepository;
+import com.windsurf.contractengine.repository.JournalEntryRepository;
+import com.windsurf.contractengine.repository.PaymentScheduleRepository;
 import com.windsurf.contractengine.util.ContractUpdateUtil;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -38,6 +41,15 @@ class AmortizationScheduleGenerationTest {
     private ContractRepository contractRepository;
 
     @Mock
+    private AmortizationScheduleRepository amortizationScheduleRepository;
+
+    @Mock
+    private JournalEntryRepository journalEntryRepository;
+
+    @Mock
+    private PaymentScheduleRepository paymentScheduleRepository;
+
+    @Mock
     private ContractUpdateUtil contractUpdateUtil;
 
     private ContractService contractService;
@@ -49,10 +61,13 @@ class AmortizationScheduleGenerationTest {
         objectMapper = new ObjectMapper();
         // 手动创建 service 实例，因为 ContractServiceImpl 的 objectMapper 是内部初始化的
         contractService = new com.windsurf.contractengine.service.impl.ContractServiceImpl(
-                contractRepository, 
+                contractRepository,
+                amortizationScheduleRepository,
+                journalEntryRepository,
+                paymentScheduleRepository,
                 contractUpdateUtil
         );
-        
+
         testContract = new Contract();
         testContract.setId(1L);
         testContract.setContractNumber("CT202501001");
@@ -78,15 +93,15 @@ class AmortizationScheduleGenerationTest {
         assertNotNull(response);
         assertEquals(1L, response.getContractId());
         assertEquals(AmortizationStrategy.SERVICE_PERIOD.name(), response.getAmortizationStrategy());
-        
+
         // 验证摊销明细
         assertNotNull(response.getAmortizationSchedule());
         assertEquals(12, response.getAmortizationSchedule().size());
-        
+
         // 验证每月摊销金额
         BigDecimal expectedMonthlyAmount = new BigDecimal("10000.00");
         response.getAmortizationSchedule().forEach(item -> {
-            assertEquals(expectedMonthlyAmount, item.getAmortizationAmount());
+            assertEquals(0, item.getAmortizationAmount().compareTo(expectedMonthlyAmount));
             assertNotNull(item.getPeriod());
             assertNotNull(item.getAccrualPeriod());
             assertNull(item.getMilestone()); // 服务周期策略不应有里程碑
@@ -95,14 +110,14 @@ class AmortizationScheduleGenerationTest {
         // 验证汇总信息
         assertNotNull(response.getSummary());
         assertEquals(12, response.getSummary().getTotalRecords());
-        assertEquals(new BigDecimal("120000.00"), response.getSummary().getTotalAmortizationAmount());
-        assertEquals(new BigDecimal("10000.00"), response.getSummary().getAverageMonthlyAmount());
+        assertEquals(0, response.getSummary().getTotalAmortizationAmount().compareTo(new BigDecimal("120000.00")));
+        assertEquals(0, response.getSummary().getAverageMonthlyAmount().compareTo(new BigDecimal("10000.00")));
         assertEquals("2025-01", response.getSummary().getStartPeriod());
         assertEquals("2025-12", response.getSummary().getEndPeriod());
 
         // 验证计算依据
         assertNotNull(response.getCalculationBasis());
-        assertEquals(new BigDecimal("120000.00"), response.getCalculationBasis().getTotalAmount());
+        assertEquals(0, response.getCalculationBasis().getTotalAmount().compareTo(new BigDecimal("120000.00")));
         assertEquals("MONTHLY", response.getCalculationBasis().getServicePeriodType());
         assertEquals(12, response.getCalculationBasis().getServiceDuration());
         assertTrue(response.getCalculationBasis().getAmortizationFormula().contains("服务期间月数"));
@@ -123,14 +138,14 @@ class AmortizationScheduleGenerationTest {
         // 验证
         assertNotNull(response);
         assertEquals(AmortizationStrategy.SERVICE_PERIOD.name(), response.getAmortizationStrategy());
-        
+
         // 4个季度 = 12个月
         assertEquals(12, response.getAmortizationSchedule().size());
-        
+
         // 验证每月摊销金额 (120000 / 12 = 10000)
         BigDecimal expectedMonthlyAmount = new BigDecimal("10000.00");
         response.getAmortizationSchedule().forEach(item -> {
-            assertEquals(expectedMonthlyAmount, item.getAmortizationAmount());
+            assertEquals(0, item.getAmortizationAmount().compareTo(expectedMonthlyAmount));
         });
     }
 
@@ -149,10 +164,10 @@ class AmortizationScheduleGenerationTest {
         // 验证
         assertNotNull(response);
         assertEquals(12, response.getAmortizationSchedule().size());
-        
+
         BigDecimal expectedMonthlyAmount = new BigDecimal("10000.00");
         response.getAmortizationSchedule().forEach(item -> {
-            assertEquals(expectedMonthlyAmount, item.getAmortizationAmount());
+            assertEquals(0, item.getAmortizationAmount().compareTo(expectedMonthlyAmount));
         });
     }
 
@@ -161,29 +176,29 @@ class AmortizationScheduleGenerationTest {
     void testGenerateAmortizationSchedule_DeliveryNodes() throws Exception {
         // 准备数据 - 使用 timeElements JSON
         TimeElementsDto timeElements = new TimeElementsDto();
-        
+
         List<TimeElementsDto.DeliveryNodeDto> deliveryNodes = new ArrayList<>();
-        
+
         TimeElementsDto.DeliveryNodeDto node1 = new TimeElementsDto.DeliveryNodeDto();
         node1.setMilestone("项目启动");
         node1.setPercentage(30);
         node1.setDueDate("2025-01-15");
         deliveryNodes.add(node1);
-        
+
         TimeElementsDto.DeliveryNodeDto node2 = new TimeElementsDto.DeliveryNodeDto();
         node2.setMilestone("中期交付");
         node2.setPercentage(40);
         node2.setDueDate("2025-06-15");
         deliveryNodes.add(node2);
-        
+
         TimeElementsDto.DeliveryNodeDto node3 = new TimeElementsDto.DeliveryNodeDto();
         node3.setMilestone("项目完成");
         node3.setPercentage(30);
         node3.setDueDate("2025-12-15");
         deliveryNodes.add(node3);
-        
+
         timeElements.setDeliveryNodes(deliveryNodes);
-        
+
         String timeElementsJson = objectMapper.writeValueAsString(timeElements);
         testContract.setTimeElements(timeElementsJson);
 
@@ -196,36 +211,36 @@ class AmortizationScheduleGenerationTest {
         assertNotNull(response);
         assertEquals(1L, response.getContractId());
         assertEquals(AmortizationStrategy.DELIVERY_NODES.name(), response.getAmortizationStrategy());
-        
+
         // 验证摊销明细
         assertNotNull(response.getAmortizationSchedule());
         assertEquals(3, response.getAmortizationSchedule().size());
-        
+
         // 验证第一个节点
         var item1 = response.getAmortizationSchedule().get(0);
         assertEquals("项目启动", item1.getMilestone());
         assertEquals(30, item1.getPercentage());
-        assertEquals(new BigDecimal("36000.00"), item1.getAmortizationAmount()); // 120000 * 30%
+        assertEquals(0, item1.getAmortizationAmount().compareTo(new BigDecimal("36000.00"))); // 120000 * 30%
         assertEquals("2025-01-15", item1.getAccrualPeriod());
-        
+
         // 验证第二个节点
         var item2 = response.getAmortizationSchedule().get(1);
         assertEquals("中期交付", item2.getMilestone());
         assertEquals(40, item2.getPercentage());
-        assertEquals(new BigDecimal("48000.00"), item2.getAmortizationAmount()); // 120000 * 40%
+        assertEquals(0, item2.getAmortizationAmount().compareTo(new BigDecimal("48000.00"))); // 120000 * 40%
         assertEquals("2025-06-15", item2.getAccrualPeriod());
-        
+
         // 验证第三个节点
         var item3 = response.getAmortizationSchedule().get(2);
         assertEquals("项目完成", item3.getMilestone());
         assertEquals(30, item3.getPercentage());
-        assertEquals(new BigDecimal("36000.00"), item3.getAmortizationAmount()); // 120000 * 30%
+        assertEquals(0, item3.getAmortizationAmount().compareTo(new BigDecimal("36000.00"))); // 120000 * 30%
         assertEquals("2025-12-15", item3.getAccrualPeriod());
 
         // 验证汇总信息
         assertNotNull(response.getSummary());
         assertEquals(3, response.getSummary().getTotalRecords());
-        assertEquals(new BigDecimal("120000.00"), response.getSummary().getTotalAmortizationAmount());
+        assertEquals(0, response.getSummary().getTotalAmortizationAmount().compareTo(new BigDecimal("120000.00")));
 
         // 验证计算依据
         assertNotNull(response.getCalculationBasis());
@@ -240,14 +255,14 @@ class AmortizationScheduleGenerationTest {
     void testStrategyPriority_DeliveryNodesOverServicePeriod() throws Exception {
         // 准备数据 - 同时设置 deliveryNodes 和 servicePeriod
         TimeElementsDto timeElements = new TimeElementsDto();
-        
+
         // 设置 servicePeriod
         TimeElementsDto.ServicePeriodDto servicePeriod = new TimeElementsDto.ServicePeriodDto();
         servicePeriod.setType("MONTHLY");
         servicePeriod.setDuration(12);
         servicePeriod.setDescription("按月服务，共12个月");
         timeElements.setServicePeriod(servicePeriod);
-        
+
         // 设置 deliveryNodes
         List<TimeElementsDto.DeliveryNodeDto> deliveryNodes = new ArrayList<>();
         TimeElementsDto.DeliveryNodeDto node = new TimeElementsDto.DeliveryNodeDto();
@@ -256,7 +271,7 @@ class AmortizationScheduleGenerationTest {
         node.setDueDate("2025-06-30");
         deliveryNodes.add(node);
         timeElements.setDeliveryNodes(deliveryNodes);
-        
+
         String timeElementsJson = objectMapper.writeValueAsString(timeElements);
         testContract.setTimeElements(timeElementsJson);
 
@@ -293,7 +308,7 @@ class AmortizationScheduleGenerationTest {
         IllegalStateException exception = assertThrows(IllegalStateException.class, () -> {
             contractService.generateAmortizationSchedule(1L);
         });
-        
+
         assertTrue(exception.getMessage().contains("总金额"));
     }
 
@@ -310,7 +325,7 @@ class AmortizationScheduleGenerationTest {
         IllegalStateException exception = assertThrows(IllegalStateException.class, () -> {
             contractService.generateAmortizationSchedule(1L);
         });
-        
+
         assertTrue(exception.getMessage().contains("时间要素"));
     }
 
@@ -319,16 +334,16 @@ class AmortizationScheduleGenerationTest {
     void testGenerateAmortizationSchedule_TimeElementsServicePeriod() throws Exception {
         // 准备数据 - 只在 timeElements 中设置 servicePeriod
         TimeElementsDto timeElements = new TimeElementsDto();
-        
+
         TimeElementsDto.ServicePeriodDto servicePeriod = new TimeElementsDto.ServicePeriodDto();
         servicePeriod.setType("MONTHLY");
         servicePeriod.setDuration(6);
         servicePeriod.setDescription("按月服务，共6个月");
         timeElements.setServicePeriod(servicePeriod);
-        
+
         String timeElementsJson = objectMapper.writeValueAsString(timeElements);
         testContract.setTimeElements(timeElementsJson);
-        
+
         // 不设置实体字段
         testContract.setServicePeriodType(null);
         testContract.setServiceDuration(null);
@@ -341,11 +356,11 @@ class AmortizationScheduleGenerationTest {
         // 验证
         assertEquals(AmortizationStrategy.SERVICE_PERIOD.name(), response.getAmortizationStrategy());
         assertEquals(6, response.getAmortizationSchedule().size());
-        
+
         // 验证每月摊销金额 (120000 / 6 = 20000)
         BigDecimal expectedMonthlyAmount = new BigDecimal("20000.00");
         response.getAmortizationSchedule().forEach(item -> {
-            assertEquals(expectedMonthlyAmount, item.getAmortizationAmount());
+            assertEquals(0, item.getAmortizationAmount().compareTo(expectedMonthlyAmount));
         });
     }
 
@@ -354,23 +369,23 @@ class AmortizationScheduleGenerationTest {
     void testGenerateAmortizationSchedule_DeliveryNodesPercentageNotHundred() throws Exception {
         // 准备数据 - 百分比总和不等于100
         TimeElementsDto timeElements = new TimeElementsDto();
-        
+
         List<TimeElementsDto.DeliveryNodeDto> deliveryNodes = new ArrayList<>();
-        
+
         TimeElementsDto.DeliveryNodeDto node1 = new TimeElementsDto.DeliveryNodeDto();
         node1.setMilestone("第一期");
         node1.setPercentage(50);
         node1.setDueDate("2025-03-01");
         deliveryNodes.add(node1);
-        
+
         TimeElementsDto.DeliveryNodeDto node2 = new TimeElementsDto.DeliveryNodeDto();
         node2.setMilestone("第二期");
         node2.setPercentage(40); // 总和 = 90%，不等于100%
         node2.setDueDate("2025-06-01");
         deliveryNodes.add(node2);
-        
+
         timeElements.setDeliveryNodes(deliveryNodes);
-        
+
         String timeElementsJson = objectMapper.writeValueAsString(timeElements);
         testContract.setTimeElements(timeElementsJson);
 
@@ -382,8 +397,8 @@ class AmortizationScheduleGenerationTest {
         // 验证 - 仍然能生成，但金额会按实际百分比计算
         assertNotNull(response);
         assertEquals(2, response.getAmortizationSchedule().size());
-        assertEquals(new BigDecimal("60000.00"), response.getAmortizationSchedule().get(0).getAmortizationAmount());
-        assertEquals(new BigDecimal("48000.00"), response.getAmortizationSchedule().get(1).getAmortizationAmount());
+        assertEquals(0, response.getAmortizationSchedule().get(0).getAmortizationAmount().compareTo(new BigDecimal("60000.00")));
+        assertEquals(0, response.getAmortizationSchedule().get(1).getAmortizationAmount().compareTo(new BigDecimal("48000.00")));
     }
 
     @Test
@@ -400,9 +415,9 @@ class AmortizationScheduleGenerationTest {
         // 验证合同信息
         assertNotNull(response.getContractInfo());
         assertEquals("test_contract.pdf", response.getContractInfo().getFileName());
-        assertEquals(new BigDecimal("120000.00"), response.getContractInfo().getTotalAmount());
+        assertEquals(0, response.getContractInfo().getTotalAmount().compareTo(new BigDecimal("120000.00")));
         assertEquals("2025-01-01", response.getContractInfo().getContractStartDate());
-        
+
         assertNotNull(response.getContractInfo().getServicePeriod());
         assertEquals("MONTHLY", response.getContractInfo().getServicePeriod().getType());
         assertEquals(12, response.getContractInfo().getServicePeriod().getDuration());

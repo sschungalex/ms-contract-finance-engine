@@ -818,6 +818,203 @@ Content-Type: application/json
 
 ---
 
+### 1.7 会计分录查询 API
+```
+GET /api/contracts/{id}/journal-entries
+```
+
+#### 路径参数
+| 参数名 | 类型 | 必填 | 说明 | 约束 |
+|--------|------|------|------|------|
+| id | Long | 是 | 合同ID | 大于0的整数 |
+
+#### 请求示例
+```
+GET /api/contracts/123/journal-entries
+```
+
+#### 成功响应 (HTTP 200)
+```json
+{
+  "code": 0,
+  "message": "success",
+  "data": {
+    "contractId": 123,
+    "journalEntries": [
+      {
+        "id": 1,
+        "entryNumber": "JE-2025-001",
+        "entryId": "JE-2025-001",
+        "entryDate": "2025-01-15",
+        "bookingDate": "2025-01-15",
+        "entryType": "PAYMENT",
+        "description": "合同预付款确认",
+        "reference": "Contract-123-Payment-1",
+        "totalAmount": 30000.00,
+        "totalDr": 30000.00,
+        "totalCr": 30000.00,
+        "balanced": true,
+        "status": "POSTED",
+        "paymentScheduleId": 1,
+        "amortizationScheduleId": null,
+        "remarks": "系统自动生成",
+        "createdAt": "2025-01-15 10:30:00",
+        "createdBy": "system",
+        "entryLines": [
+          {
+            "id": 1,
+            "lineNumber": 1,
+            "bookingDate": "2025-01-15",
+            "glAccount": "1221",
+            "glAccountName": "预付账款",
+            "debitAmount": 30000.00,
+            "creditAmount": 0.00,
+            "enteredDr": 30000.00,
+            "enteredCr": 0.00,
+            "description": "确认预付服务费",
+            "auxiliaryInfo": null,
+            "createdAt": "2025-01-15 10:30:00"
+          },
+          {
+            "id": 2,
+            "lineNumber": 2,
+            "bookingDate": "2025-01-15",
+            "glAccount": "1001",
+            "glAccountName": "活期存款",
+            "debitAmount": 0.00,
+            "creditAmount": 30000.00,
+            "enteredDr": 0.00,
+            "enteredCr": 30000.00,
+            "description": "银行转账付款",
+            "auxiliaryInfo": null,
+            "createdAt": "2025-01-15 10:30:00"
+          }
+        ]
+      },
+      {
+        "id": 2,
+        "entryNumber": "JE-2025-002",
+        "entryId": "JE-2025-002",
+        "entryDate": "2025-01-31",
+        "bookingDate": "2025-01-31",
+        "entryType": "AMORTIZATION",
+        "description": "1月份服务费用摊销",
+        "reference": "Contract-123-Amortization-2025-01",
+        "totalAmount": 10000.00,
+        "totalDr": 10000.00,
+        "totalCr": 10000.00,
+        "balanced": true,
+        "status": "POSTED",
+        "paymentScheduleId": null,
+        "amortizationScheduleId": 1,
+        "remarks": "系统自动生成",
+        "createdAt": "2025-01-31 23:59:59",
+        "createdBy": "system",
+        "entryLines": [
+          {
+            "id": 3,
+            "lineNumber": 1,
+            "bookingDate": "2025-01-31",
+            "glAccount": "6001",
+            "glAccountName": "服务费用",
+            "debitAmount": 10000.00,
+            "creditAmount": 0.00,
+            "enteredDr": 10000.00,
+            "enteredCr": 0.00,
+            "description": "1月份服务费摊销",
+            "auxiliaryInfo": null,
+            "createdAt": "2025-01-31 23:59:59"
+          },
+          {
+            "id": 4,
+            "lineNumber": 2,
+            "bookingDate": "2025-01-31",
+            "glAccount": "1221",
+            "glAccountName": "预付账款",
+            "debitAmount": 0.00,
+            "creditAmount": 10000.00,
+            "enteredDr": 0.00,
+            "enteredCr": 10000.00,
+            "description": "预付账款摊销",
+            "auxiliaryInfo": null,
+            "createdAt": "2025-01-31 23:59:59"
+          }
+        ]
+      }
+    ],
+    "summary": {
+      "totalEntries": 2,
+      "paymentEntries": 1,
+      "amortizationEntries": 1,
+      "totalDebitAmount": 40000.00,
+      "totalCreditAmount": 40000.00,
+      "balanced": true,
+      "earliestEntryDate": "2025-01-15",
+      "latestEntryDate": "2025-01-31",
+      "draftEntries": 0,
+      "postedEntries": 2
+    }
+  },
+  "traceId": "trace-123456"
+}
+```
+
+#### 响应字段说明
+| 字段名 | 类型 | 说明 | 示例 |
+|--------|------|------|------|
+| contractId | Long | 合同ID | 123 |
+| journalEntries | Array | 会计分录列表 | 包含所有相关分录 |
+| journalEntries[].id | Long | 分录数据库ID | 1 |
+| journalEntries[].entryNumber | String | 分录编号 | "JE-2025-001" |
+| journalEntries[].entryId | String | 分录ID | "JE-2025-001" |
+| journalEntries[].entryDate | String | 分录日期 | "2025-01-15" |
+| journalEntries[].bookingDate | String | 记账日期 | "2025-01-15" |
+| journalEntries[].entryType | String | 分录类型 | PAYMENT/AMORTIZATION/ADJUSTMENT |
+| journalEntries[].description | String | 分录描述 | "合同预付款确认" |
+| journalEntries[].reference | String | 参考号 | "Contract-123-Payment-1" |
+| journalEntries[].totalAmount | Number | 总金额 | 30000.00 |
+| journalEntries[].totalDr | Number | 借方总额 | 30000.00 |
+| journalEntries[].totalCr | Number | 贷方总额 | 30000.00 |
+| journalEntries[].balanced | Boolean | 是否平衡 | true |
+| journalEntries[].status | String | 分录状态 | DRAFT/POSTED |
+| journalEntries[].paymentScheduleId | Long | 关联支付计划ID | 1 |
+| journalEntries[].amortizationScheduleId | Long | 关联摊销计划ID | 1 |
+| journalEntries[].remarks | String | 备注 | "系统自动生成" |
+| journalEntries[].createdAt | String | 创建时间 | "2025-01-15 10:30:00" |
+| journalEntries[].createdBy | String | 创建人 | "system" |
+| journalEntries[].entryLines | Array | 分录明细行 | 包含借贷明细 |
+| entryLines[].id | Long | 明细行数据库ID | 1 |
+| entryLines[].lineNumber | Integer | 行号 | 1 |
+| entryLines[].bookingDate | String | 记账日期 | "2025-01-15" |
+| entryLines[].glAccount | String | GL科目代码 | "1221" |
+| entryLines[].glAccountName | String | GL科目名称 | "预付账款" |
+| entryLines[].debitAmount | Number | 借方金额 | 30000.00 |
+| entryLines[].creditAmount | Number | 贷方金额 | 0.00 |
+| entryLines[].enteredDr | Number | 录入借方金额 | 30000.00 |
+| entryLines[].enteredCr | Number | 录入贷方金额 | 0.00 |
+| entryLines[].description | String | 明细描述 | "确认预付服务费" |
+| entryLines[].auxiliaryInfo | String | 辅助核算信息 | null |
+| entryLines[].createdAt | String | 创建时间 | "2025-01-15 10:30:00" |
+| summary | Object | 汇总统计信息 | 包含各类统计数据 |
+| summary.totalEntries | Integer | 分录总数 | 2 |
+| summary.paymentEntries | Integer | 付款分录数 | 1 |
+| summary.amortizationEntries | Integer | 摊销分录数 | 1 |
+| summary.totalDebitAmount | Number | 借方总金额 | 40000.00 |
+| summary.totalCreditAmount | Number | 贷方总金额 | 40000.00 |
+| summary.balanced | Boolean | 整体平衡状态 | true |
+| summary.earliestEntryDate | String | 最早分录日期 | "2025-01-15" |
+| summary.latestEntryDate | String | 最晚分录日期 | "2025-01-31" |
+| summary.draftEntries | Integer | 草稿状态分录数 | 0 |
+| summary.postedEntries | Integer | 已过账分录数 | 2 |
+
+#### 错误响应
+| HTTP状态码 | 错误码 | 说明 |
+|-----------|--------|------|
+| 404 | 40401 | 合同不存在 |
+| 500 | 50006 | 会计分录查询异常 |
+
+---
+
 ## 2. AI扫描提取字段详细说明
 
 ### 2.1 金额要素 (amountElements)
