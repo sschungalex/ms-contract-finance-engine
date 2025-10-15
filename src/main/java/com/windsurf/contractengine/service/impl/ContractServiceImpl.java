@@ -3,13 +3,23 @@ package com.windsurf.contractengine.service.impl;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.windsurf.contractengine.dto.*;
+import com.windsurf.contractengine.entity.AmortizationSchedule;
 import com.windsurf.contractengine.entity.Contract;
+import com.windsurf.contractengine.entity.JournalEntry;
+import com.windsurf.contractengine.entity.JournalEntryLine;
+import com.windsurf.contractengine.entity.PaymentSchedule;
 import com.windsurf.contractengine.enums.AIProcessingStatus;
 import com.windsurf.contractengine.enums.AmortizationStrategy;
 import com.windsurf.contractengine.enums.ContractStatus;
+import com.windsurf.contractengine.enums.EntryStatus;
+import com.windsurf.contractengine.enums.EntryType;
+import com.windsurf.contractengine.enums.PaymentStatus;
 import com.windsurf.contractengine.enums.ServicePeriodType;
 import com.windsurf.contractengine.exception.ResourceNotFoundException;
+import com.windsurf.contractengine.repository.AmortizationScheduleRepository;
 import com.windsurf.contractengine.repository.ContractRepository;
+import com.windsurf.contractengine.repository.JournalEntryRepository;
+import com.windsurf.contractengine.repository.PaymentScheduleRepository;
 import com.windsurf.contractengine.service.ContractService;
 import com.windsurf.contractengine.util.ContractUpdateUtil;
 import lombok.RequiredArgsConstructor;
@@ -37,6 +47,9 @@ import java.util.stream.Collectors;
 public class ContractServiceImpl implements ContractService {
 
     private final ContractRepository contractRepository;
+    private final AmortizationScheduleRepository amortizationScheduleRepository;
+    private final JournalEntryRepository journalEntryRepository;
+    private final PaymentScheduleRepository paymentScheduleRepository;
     private final ContractUpdateUtil contractUpdateUtil;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -698,11 +711,609 @@ public class ContractServiceImpl implements ContractService {
 
     @Override
     @Transactional
-    public void generateJournalEntries(Long id) {
-        log.info("生成会计分录: id={}", id);
+    public JournalEntryGenerationResponse generateJournalEntries(Long id, JournalEntryGenerationRequest request) {
+        log.info("生成会计分录: id={}, contractId={}", id, request.getContractInfo().getContractId());
 
-        // TODO: 实现生成会计分录逻辑
-        throw new UnsupportedOperationException("生成会计分录功能待实现");
+        // 验证合同存在
+        Contract contract = contractRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("合同不存在: " + id));
+
+        // 验证请求中的合同ID与路径参数一致
+        if (!id.equals(request.getContractInfo().getContractId())) {
+            throw new IllegalArgumentException("路径参数合同ID与请求体中合同ID不一致");
+        }
+
+        // 检查是否存在摊销记录
+        boolean hasAmortizationSchedule = amortizationScheduleRepository.existsByContractId(id);
+        log.info("合同{}是否存在摊销记录: {}", id, hasAmortizationSchedule);
+
+        // 生成会计分录
+        return generateJournalEntriesInternal(contract, request, hasAmortizationSchedule);
+    }
+
+    /**
+     * 内部方法：生成会计分录的具体实现
+     */
+    private JournalEntryGenerationResponse generateJournalEntriesInternal(Contract contract,
+                                                                          JournalEntryGenerationRequest request,
+                                                                          boolean hasAmortizationSchedule) {
+        JournalEntryGenerationResponse response = new JournalEntryGenerationResponse();
+        response.setContractId(contract.getId());
+        response.setGeneratedTime(java.time.ZonedDateTime.now());
+
+        List<JournalEntryGenerationResponse.JournalEntryDto> journalEntries = new ArrayList<>();
+        
+        // 1. 处理付款确认分录
+        if (request.getActualPayments() != null && !request.getActualPayments().isEmpty()) {
+            // 先持久化实际付款记录
+            List<PaymentSchedule> savedPayments = persistActualPayments(contract, request.getActualPayments());
+            log.info("持久化了{}笔实际付款记录", savedPayments.size());
+            
+            // 生成付款确认分录
+            journalEntries.addAll(generatePaymentEntries(request));
+            log.info("生成了{}笔付款确认分录", request.getActualPayments().size());
+        }
+        
+        // 2. 处理摊销分录
+        boolean shouldIncludeAccruals = request.getGenerateOptions() == null || 
+                request.getGenerateOptions().getIncludeAccruals() == null || 
+                request.getGenerateOptions().getIncludeAccruals();
+                
+        if (shouldIncludeAccruals) {
+            if (hasAmortizationSchedule) {
+                // 使用现有摊销记录生成分录
+                journalEntries.addAll(generateAmortizationEntriesFromSchedule(contract.getId(), request));
+                log.info("基于现有摊销记录生成摊销分录");
+            } else {
+                // 使用请求信息计算摊销分录
+                journalEntries.addAll(generateAmortizationEntries(request));
+                log.info("基于请求信息计算摊销分录");
+            }
+        }
+
+        // 3. 持久化会计分录
+        List<JournalEntry> savedJournalEntries = persistJournalEntries(contract, journalEntries);
+        log.info("持久化了{}笔会计分录", savedJournalEntries.size());
+
+        response.setJournalEntries(journalEntries);
+        response.setSummary(calculateSummary(request, journalEntries, hasAmortizationSchedule));
+        response.setAccountingPrinciples(getAccountingPrinciples());
+        response.setGlAccountMapping(getGlAccountMapping());
+
+        return response;
+    }
+
+    /**
+     * 生成付款确认分录
+     */
+    private List<JournalEntryGenerationResponse.JournalEntryDto> generatePaymentEntries(JournalEntryGenerationRequest request) {
+        List<JournalEntryGenerationResponse.JournalEntryDto> entries = new ArrayList<>();
+        
+        int entryIndex = 1;
+        for (JournalEntryGenerationRequest.ActualPayment payment : request.getActualPayments()) {
+            JournalEntryGenerationResponse.JournalEntryDto entry = new JournalEntryGenerationResponse.JournalEntryDto();
+            
+            entry.setEntryId(String.format("JE-%d-%03d", java.time.LocalDate.now().getYear(), entryIndex));
+            entry.setBookingDate(payment.getPaymentDate());
+            entry.setDescription("合同预付款确认");
+            entry.setReference(String.format("Contract-%d-Payment-%d", 
+                    request.getContractInfo().getContractId(), entryIndex));
+            
+            List<JournalEntryGenerationResponse.JournalEntryLineDto> lines = new ArrayList<>();
+            
+            // 借方：预付账款
+            JournalEntryGenerationResponse.JournalEntryLineDto drLine = new JournalEntryGenerationResponse.JournalEntryLineDto();
+            drLine.setLineNumber(1);
+            drLine.setBookingDate(payment.getPaymentDate());
+            drLine.setGlAccount("1221");
+            drLine.setGlAccountName("预付账款");
+            drLine.setEnteredDr(payment.getAmount());
+            drLine.setEnteredCr(BigDecimal.ZERO);
+            drLine.setDescription("确认预付服务费");
+            lines.add(drLine);
+            
+            // 贷方：活期存款
+            JournalEntryGenerationResponse.JournalEntryLineDto crLine = new JournalEntryGenerationResponse.JournalEntryLineDto();
+            crLine.setLineNumber(2);
+            crLine.setBookingDate(payment.getPaymentDate());
+            crLine.setGlAccount("1001");
+            crLine.setGlAccountName("活期存款");
+            crLine.setEnteredDr(BigDecimal.ZERO);
+            crLine.setEnteredCr(payment.getAmount());
+            crLine.setDescription(payment.getPaymentMethod() + "付款");
+            lines.add(crLine);
+            
+            entry.setLines(lines);
+            entry.setTotalDr(payment.getAmount());
+            entry.setTotalCr(payment.getAmount());
+            entry.setBalanced(true);
+            
+            entries.add(entry);
+            entryIndex++;
+        }
+        
+        return entries;
+    }
+
+    /**
+     * 生成费用摊销分录
+     */
+    private List<JournalEntryGenerationResponse.JournalEntryDto> generateAmortizationEntries(JournalEntryGenerationRequest request) {
+        List<JournalEntryGenerationResponse.JournalEntryDto> entries = new ArrayList<>();
+        
+        // 计算月度摊销金额
+        BigDecimal totalAmount = request.getContractInfo().getTotalAmount();
+        Integer duration = request.getContractInfo().getPaymentPeriod().getDuration();
+        BigDecimal monthlyAmortization = totalAmount.divide(BigDecimal.valueOf(duration), 2, BigDecimal.ROUND_HALF_UP);
+        
+        // 获取最早付款日期作为摊销开始日期
+        LocalDate startDate = request.getActualPayments().stream()
+                .map(JournalEntryGenerationRequest.ActualPayment::getPaymentDate)
+                .min(LocalDate::compareTo)
+                .orElse(LocalDate.now());
+        
+        int entryIndex = request.getActualPayments().size() + 1;
+        
+        // 生成每月摊销分录（这里简化为生成前几个月的示例）
+        for (int month = 0; month < Math.min(duration, 3); month++) {
+            LocalDate amortizationDate = startDate.plusMonths(month).withDayOfMonth(
+                    startDate.plusMonths(month).lengthOfMonth()); // 月末
+            
+            JournalEntryGenerationResponse.JournalEntryDto entry = new JournalEntryGenerationResponse.JournalEntryDto();
+            
+            entry.setEntryId(String.format("JE-%d-%03d", amortizationDate.getYear(), entryIndex));
+            entry.setBookingDate(amortizationDate);
+            entry.setDescription(String.format("%d月份服务费用摊销", amortizationDate.getMonthValue()));
+            entry.setReference(String.format("Contract-%d-Amortization-%d-%02d", 
+                    request.getContractInfo().getContractId(), 
+                    amortizationDate.getYear(), 
+                    amortizationDate.getMonthValue()));
+            
+            List<JournalEntryGenerationResponse.JournalEntryLineDto> lines = new ArrayList<>();
+            
+            // 借方：服务费用
+            JournalEntryGenerationResponse.JournalEntryLineDto drLine = new JournalEntryGenerationResponse.JournalEntryLineDto();
+            drLine.setLineNumber(1);
+            drLine.setBookingDate(amortizationDate);
+            drLine.setGlAccount("6001");
+            drLine.setGlAccountName("服务费用");
+            drLine.setEnteredDr(monthlyAmortization);
+            drLine.setEnteredCr(BigDecimal.ZERO);
+            drLine.setDescription(String.format("%d月份服务费摊销", amortizationDate.getMonthValue()));
+            lines.add(drLine);
+            
+            // 贷方：预付账款
+            JournalEntryGenerationResponse.JournalEntryLineDto crLine = new JournalEntryGenerationResponse.JournalEntryLineDto();
+            crLine.setLineNumber(2);
+            crLine.setBookingDate(amortizationDate);
+            crLine.setGlAccount("1221");
+            crLine.setGlAccountName("预付账款");
+            crLine.setEnteredDr(BigDecimal.ZERO);
+            crLine.setEnteredCr(monthlyAmortization);
+            crLine.setDescription("预付账款摊销");
+            lines.add(crLine);
+            
+            entry.setLines(lines);
+            entry.setTotalDr(monthlyAmortization);
+            entry.setTotalCr(monthlyAmortization);
+            entry.setBalanced(true);
+            
+            entries.add(entry);
+            entryIndex++;
+        }
+        
+        return entries;
+    }
+
+    /**
+     * 基于现有摊销记录生成费用摊销分录
+     */
+    private List<JournalEntryGenerationResponse.JournalEntryDto> generateAmortizationEntriesFromSchedule(Long contractId, JournalEntryGenerationRequest request) {
+        List<JournalEntryGenerationResponse.JournalEntryDto> entries = new ArrayList<>();
+        
+        // 查询合同的摊销记录
+        List<AmortizationSchedule> schedules = amortizationScheduleRepository.findByContractIdOrderByPeriodNumber(contractId);
+        
+        if (schedules.isEmpty()) {
+            log.warn("合同{}没有找到摊销记录", contractId);
+            return entries;
+        }
+        
+        log.info("找到{}条摊销记录", schedules.size());
+        
+        // 计算已付款的期间数（如果有实际付款信息）
+        int paidPeriods = calculatePaidPeriods(request, schedules);
+        
+        int entryIndex = (request.getActualPayments() != null ? request.getActualPayments().size() : 0) + 1;
+        
+        for (int i = 0; i < schedules.size(); i++) {
+            AmortizationSchedule schedule = schedules.get(i);
+            
+            // 如果没有实际付款信息，或者当前期间在已付款期间内，则生成摊销分录
+            if (request.getActualPayments() == null || request.getActualPayments().isEmpty() || i < paidPeriods) {
+                JournalEntryGenerationResponse.JournalEntryDto entry = new JournalEntryGenerationResponse.JournalEntryDto();
+                
+                entry.setEntryId(String.format("JE-%d-%03d", schedule.getAmortizationDate().getYear(), entryIndex));
+                entry.setBookingDate(schedule.getAmortizationDate());
+                entry.setDescription(String.format("%s服务费用摊销", schedule.getPeriod() != null ? schedule.getPeriod() : ("第" + schedule.getPeriodNumber() + "期")));
+                entry.setReference(String.format("Contract-%d-Amortization-Schedule-%d", contractId, schedule.getPeriodNumber()));
+                
+                List<JournalEntryGenerationResponse.JournalEntryLineDto> lines = new ArrayList<>();
+                
+                // 借方：服务费用
+                JournalEntryGenerationResponse.JournalEntryLineDto drLine = new JournalEntryGenerationResponse.JournalEntryLineDto();
+                drLine.setLineNumber(1);
+                drLine.setBookingDate(schedule.getAmortizationDate());
+                drLine.setGlAccount("6001");
+                drLine.setGlAccountName("服务费用");
+                drLine.setEnteredDr(schedule.getAmortizationAmount());
+                drLine.setEnteredCr(BigDecimal.ZERO);
+                drLine.setDescription(String.format("%s服务费摊销", schedule.getPeriod() != null ? schedule.getPeriod() : ("第" + schedule.getPeriodNumber() + "期")));
+                lines.add(drLine);
+                
+                // 贷方：预付账款
+                JournalEntryGenerationResponse.JournalEntryLineDto crLine = new JournalEntryGenerationResponse.JournalEntryLineDto();
+                crLine.setLineNumber(2);
+                crLine.setBookingDate(schedule.getAmortizationDate());
+                crLine.setGlAccount("1221");
+                crLine.setGlAccountName("预付账款");
+                crLine.setEnteredDr(BigDecimal.ZERO);
+                crLine.setEnteredCr(schedule.getAmortizationAmount());
+                crLine.setDescription("预付账款摊销");
+                lines.add(crLine);
+                
+                entry.setLines(lines);
+                entry.setTotalDr(schedule.getAmortizationAmount());
+                entry.setTotalCr(schedule.getAmortizationAmount());
+                entry.setBalanced(true);
+                
+                entries.add(entry);
+                entryIndex++;
+            }
+        }
+        
+        return entries;
+    }
+
+    /**
+     * 计算已付款对应的期间数
+     */
+    private int calculatePaidPeriods(JournalEntryGenerationRequest request, List<AmortizationSchedule> schedules) {
+        if (request.getActualPayments() == null || request.getActualPayments().isEmpty()) {
+            return schedules.size(); // 没有付款信息，返回所有期间
+        }
+        
+        // 计算总付款金额
+        BigDecimal totalPaidAmount = request.getActualPayments().stream()
+                .map(JournalEntryGenerationRequest.ActualPayment::getAmount)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        
+        // 计算对应的期间数
+        BigDecimal accumulatedAmount = BigDecimal.ZERO;
+        int paidPeriods = 0;
+        
+        for (AmortizationSchedule schedule : schedules) {
+            accumulatedAmount = accumulatedAmount.add(schedule.getAmortizationAmount());
+            paidPeriods++;
+            
+            if (accumulatedAmount.compareTo(totalPaidAmount) >= 0) {
+                break;
+            }
+        }
+        
+        return paidPeriods;
+    }
+
+    /**
+     * 计算汇总信息
+     */
+    private JournalEntryGenerationResponse.SummaryInfo calculateSummary(
+            JournalEntryGenerationRequest request, 
+            List<JournalEntryGenerationResponse.JournalEntryDto> journalEntries,
+            boolean hasAmortizationSchedule) {
+        
+        JournalEntryGenerationResponse.SummaryInfo summary = new JournalEntryGenerationResponse.SummaryInfo();
+        
+        // 计算付款总额
+        BigDecimal paidAmount = request.getActualPayments() != null ? 
+                request.getActualPayments().stream()
+                        .map(JournalEntryGenerationRequest.ActualPayment::getAmount)
+                        .reduce(BigDecimal.ZERO, BigDecimal::add) : BigDecimal.ZERO;
+        
+        // 计算已摊销金额（从摊销分录中计算）
+        BigDecimal amortizedAmount = journalEntries.stream()
+                .filter(entry -> entry.getDescription().contains("摊销"))
+                .map(JournalEntryGenerationResponse.JournalEntryDto::getTotalDr)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        
+        // 计算借贷总额
+        BigDecimal totalDrAmount = journalEntries.stream()
+                .map(JournalEntryGenerationResponse.JournalEntryDto::getTotalDr)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        
+        BigDecimal totalCrAmount = journalEntries.stream()
+                .map(JournalEntryGenerationResponse.JournalEntryDto::getTotalCr)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        
+        // 统计分录数量
+        long paymentEntries = journalEntries.stream()
+                .filter(entry -> entry.getDescription().contains("预付款"))
+                .count();
+        
+        long amortizationEntries = journalEntries.stream()
+                .filter(entry -> entry.getDescription().contains("摊销"))
+                .count();
+        
+        summary.setTotalEntries(journalEntries.size());
+        summary.setTotalPaymentEntries((int) paymentEntries);
+        summary.setTotalAmortizationEntries((int) amortizationEntries);
+        summary.setTotalDrAmount(totalDrAmount);
+        summary.setTotalCrAmount(totalCrAmount);
+        summary.setContractTotalAmount(request.getContractInfo().getTotalAmount());
+        summary.setPaidAmount(paidAmount);
+        summary.setRemainingAmount(request.getContractInfo().getTotalAmount().subtract(paidAmount));
+        summary.setAmortizedAmount(amortizedAmount);
+        summary.setPrepaidBalance(paidAmount.subtract(amortizedAmount));
+        
+        return summary;
+    }
+
+    /**
+     * 获取会计准则说明
+     */
+    private JournalEntryGenerationResponse.AccountingPrinciples getAccountingPrinciples() {
+        JournalEntryGenerationResponse.AccountingPrinciples principles = new JournalEntryGenerationResponse.AccountingPrinciples();
+        principles.setPaymentRecognition("实际付款日期确认预付账款");
+        principles.setExpenseRecognition("按服务期间摊销确认费用");
+        principles.setBalancingRule("借贷必须平衡");
+        principles.setAccrualBasis("权责发生制");
+        return principles;
+    }
+
+    /**
+     * 获取科目映射关系
+     */
+    private java.util.Map<String, String> getGlAccountMapping() {
+        java.util.Map<String, String> mapping = new java.util.HashMap<>();
+        mapping.put("1001", "活期存款 (银行账户)");
+        mapping.put("1221", "预付账款 (资产科目)");
+        mapping.put("2201", "应付账款 (负债科目)");
+        mapping.put("6001", "服务费用 (费用科目)");
+        mapping.put("6999", "其他费用 (差额调整)");
+        return mapping;
+    }
+
+    /**
+     * 持久化实际付款记录
+     */
+    private List<PaymentSchedule> persistActualPayments(Contract contract, List<JournalEntryGenerationRequest.ActualPayment> actualPayments) {
+        List<PaymentSchedule> paymentSchedules = new ArrayList<>();
+        
+        for (int i = 0; i < actualPayments.size(); i++) {
+            JournalEntryGenerationRequest.ActualPayment payment = actualPayments.get(i);
+            
+            PaymentSchedule paymentSchedule = new PaymentSchedule();
+            paymentSchedule.setContract(contract);
+            paymentSchedule.setPeriodNumber(i + 1);
+            paymentSchedule.setScheduledDate(payment.getPaymentDate()); // 使用实际付款日期作为计划日期
+            paymentSchedule.setScheduledAmount(payment.getAmount()); // 使用实际付款金额作为计划金额
+            paymentSchedule.setActualDate(payment.getPaymentDate());
+            paymentSchedule.setActualAmount(payment.getAmount());
+            paymentSchedule.setPaymentMethod(payment.getPaymentMethod());
+            paymentSchedule.setPaymentDescription(payment.getDescription());
+            paymentSchedule.setStatus(PaymentStatus.PAID);
+            paymentSchedule.setVarianceAmount(BigDecimal.ZERO); // 实际与计划相同，差额为0
+            paymentSchedule.setRemarks("系统自动生成的实际付款记录");
+            
+            paymentSchedules.add(paymentSchedule);
+        }
+        
+        return paymentScheduleRepository.saveAll(paymentSchedules);
+    }
+
+    /**
+     * 持久化会计分录
+     */
+    private List<JournalEntry> persistJournalEntries(Contract contract, List<JournalEntryGenerationResponse.JournalEntryDto> journalEntryDtos) {
+        List<JournalEntry> journalEntries = new ArrayList<>();
+        
+        for (JournalEntryGenerationResponse.JournalEntryDto dto : journalEntryDtos) {
+            JournalEntry journalEntry = new JournalEntry();
+            
+            // 设置基本信息
+            journalEntry.setContract(contract);
+            journalEntry.setEntryNumber(dto.getEntryId());
+            journalEntry.setEntryId(dto.getEntryId());
+            journalEntry.setEntryDate(dto.getBookingDate());
+            journalEntry.setBookingDate(dto.getBookingDate());
+            journalEntry.setDescription(dto.getDescription());
+            journalEntry.setReference(dto.getReference());
+            journalEntry.setTotalAmount(dto.getTotalDr());
+            journalEntry.setTotalDr(dto.getTotalDr());
+            journalEntry.setTotalCr(dto.getTotalCr());
+            journalEntry.setBalanced(dto.getBalanced());
+            journalEntry.setStatus(EntryStatus.POSTED); // 设置为已过账状态
+            journalEntry.setCreatedBy("system");
+            
+            // 判断分录类型
+            if (dto.getDescription().contains("预付款")) {
+                journalEntry.setEntryType(EntryType.PAYMENT);
+            } else if (dto.getDescription().contains("摊销")) {
+                journalEntry.setEntryType(EntryType.AMORTIZATION);
+            } else {
+                journalEntry.setEntryType(EntryType.ADJUSTMENT);
+            }
+            
+            // 设置分录明细
+            List<JournalEntryLine> entryLines = new ArrayList<>();
+            for (JournalEntryGenerationResponse.JournalEntryLineDto lineDto : dto.getLines()) {
+                JournalEntryLine entryLine = new JournalEntryLine();
+                
+                entryLine.setJournalEntry(journalEntry);
+                entryLine.setLineNumber(lineDto.getLineNumber());
+                entryLine.setBookingDate(lineDto.getBookingDate());
+                entryLine.setGlAccount(lineDto.getGlAccount());
+                entryLine.setGlAccountName(lineDto.getGlAccountName());
+                entryLine.setDebitAmount(lineDto.getEnteredDr());
+                entryLine.setCreditAmount(lineDto.getEnteredCr());
+                entryLine.setEnteredDr(lineDto.getEnteredDr());
+                entryLine.setEnteredCr(lineDto.getEnteredCr());
+                entryLine.setDescription(lineDto.getDescription());
+                
+                entryLines.add(entryLine);
+            }
+            
+            journalEntry.setEntryLines(entryLines);
+            journalEntries.add(journalEntry);
+        }
+        
+        return journalEntryRepository.saveAll(journalEntries);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public JournalEntryQueryResponse getJournalEntriesByContractId(Long id) {
+        log.info("查询合同会计分录: id={}", id);
+
+        // 验证合同存在
+        Contract contract = contractRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("合同不存在: " + id));
+
+        // 查询会计分录
+        List<JournalEntry> journalEntries = journalEntryRepository.findByContractIdWithLines(id);
+
+        // 转换为响应DTO
+        return convertToJournalEntryQueryResponse(contract, journalEntries);
+    }
+
+    /**
+     * 转换会计分录实体为查询响应DTO
+     */
+    private JournalEntryQueryResponse convertToJournalEntryQueryResponse(Contract contract, List<JournalEntry> journalEntries) {
+        JournalEntryQueryResponse response = new JournalEntryQueryResponse();
+        response.setContractId(contract.getId());
+
+        // 转换分录列表
+        List<JournalEntryQueryResponse.JournalEntryItemDto> entryItems = new ArrayList<>();
+        for (JournalEntry entry : journalEntries) {
+            JournalEntryQueryResponse.JournalEntryItemDto itemDto = new JournalEntryQueryResponse.JournalEntryItemDto();
+            
+            itemDto.setId(entry.getId());
+            itemDto.setEntryNumber(entry.getEntryNumber());
+            itemDto.setEntryId(entry.getEntryId());
+            itemDto.setEntryDate(entry.getEntryDate());
+            itemDto.setBookingDate(entry.getBookingDate());
+            itemDto.setEntryType(entry.getEntryType() != null ? entry.getEntryType().name() : null);
+            itemDto.setDescription(entry.getDescription());
+            itemDto.setReference(entry.getReference());
+            itemDto.setTotalAmount(entry.getTotalAmount());
+            itemDto.setTotalDr(entry.getTotalDr());
+            itemDto.setTotalCr(entry.getTotalCr());
+            itemDto.setBalanced(entry.getBalanced());
+            itemDto.setStatus(entry.getStatus() != null ? entry.getStatus().name() : null);
+            itemDto.setPaymentScheduleId(entry.getPaymentScheduleId());
+            itemDto.setAmortizationScheduleId(entry.getAmortizationScheduleId());
+            itemDto.setRemarks(entry.getRemarks());
+            itemDto.setCreatedAt(entry.getCreatedAt());
+            itemDto.setCreatedBy(entry.getCreatedBy());
+
+            // 转换分录明细行
+            List<JournalEntryQueryResponse.JournalEntryLineItemDto> lineItems = new ArrayList<>();
+            for (JournalEntryLine line : entry.getEntryLines()) {
+                JournalEntryQueryResponse.JournalEntryLineItemDto lineDto = new JournalEntryQueryResponse.JournalEntryLineItemDto();
+                
+                lineDto.setId(line.getId());
+                lineDto.setLineNumber(line.getLineNumber());
+                lineDto.setBookingDate(line.getBookingDate());
+                lineDto.setGlAccount(line.getGlAccount());
+                lineDto.setGlAccountName(line.getGlAccountName());
+                lineDto.setDebitAmount(line.getDebitAmount());
+                lineDto.setCreditAmount(line.getCreditAmount());
+                lineDto.setEnteredDr(line.getEnteredDr());
+                lineDto.setEnteredCr(line.getEnteredCr());
+                lineDto.setDescription(line.getDescription());
+                lineDto.setAuxiliaryInfo(line.getAuxiliaryInfo());
+                lineDto.setCreatedAt(line.getCreatedAt());
+                
+                lineItems.add(lineDto);
+            }
+            
+            itemDto.setEntryLines(lineItems);
+            entryItems.add(itemDto);
+        }
+        
+        response.setJournalEntries(entryItems);
+
+        // 计算汇总统计
+        response.setSummary(calculateJournalEntrySummary(journalEntries));
+
+        return response;
+    }
+
+    /**
+     * 计算会计分录汇总统计
+     */
+    private JournalEntryQueryResponse.JournalEntrySummaryDto calculateJournalEntrySummary(List<JournalEntry> journalEntries) {
+        JournalEntryQueryResponse.JournalEntrySummaryDto summary = new JournalEntryQueryResponse.JournalEntrySummaryDto();
+        
+        summary.setTotalEntries(journalEntries.size());
+        
+        // 统计不同类型的分录数量
+        long paymentEntries = journalEntries.stream()
+                .filter(entry -> EntryType.PAYMENT.equals(entry.getEntryType()))
+                .count();
+        long amortizationEntries = journalEntries.stream()
+                .filter(entry -> EntryType.AMORTIZATION.equals(entry.getEntryType()))
+                .count();
+        
+        summary.setPaymentEntries((int) paymentEntries);
+        summary.setAmortizationEntries((int) amortizationEntries);
+
+        // 计算总金额
+        BigDecimal totalDebitAmount = journalEntries.stream()
+                .map(JournalEntry::getTotalDr)
+                .filter(amount -> amount != null)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        
+        BigDecimal totalCreditAmount = journalEntries.stream()
+                .map(JournalEntry::getTotalCr)
+                .filter(amount -> amount != null)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        
+        summary.setTotalDebitAmount(totalDebitAmount);
+        summary.setTotalCreditAmount(totalCreditAmount);
+        summary.setBalanced(totalDebitAmount.compareTo(totalCreditAmount) == 0);
+
+        // 计算日期范围
+        if (!journalEntries.isEmpty()) {
+            LocalDate earliestDate = journalEntries.stream()
+                    .map(JournalEntry::getEntryDate)
+                    .filter(date -> date != null)
+                    .min(LocalDate::compareTo)
+                    .orElse(null);
+            
+            LocalDate latestDate = journalEntries.stream()
+                    .map(JournalEntry::getEntryDate)
+                    .filter(date -> date != null)
+                    .max(LocalDate::compareTo)
+                    .orElse(null);
+            
+            summary.setEarliestEntryDate(earliestDate);
+            summary.setLatestEntryDate(latestDate);
+        }
+
+        // 统计不同状态的分录数量
+        long draftEntries = journalEntries.stream()
+                .filter(entry -> EntryStatus.DRAFT.equals(entry.getStatus()))
+                .count();
+        long postedEntries = journalEntries.stream()
+                .filter(entry -> EntryStatus.POSTED.equals(entry.getStatus()))
+                .count();
+        
+        summary.setDraftEntries((int) draftEntries);
+        summary.setPostedEntries((int) postedEntries);
+
+        return summary;
     }
 
     /**

@@ -212,16 +212,32 @@ public class ContractController {
     }
 
     /**
-     * 生成会计分录
+     * 生成会计分录 (API 1.6)
      */
     @PostMapping("/{id}/journal-entries")
-    @Operation(summary = "生成会计分录", description = "根据支付和摊销计划生成会计分录")
-    public ResponseEntity<Void> generateJournalEntries(
+    @Operation(summary = "会计分录生成", description = "根据合同信息和实际付款情况生成会计分录，包含付款确认分录和费用摊销分录")
+    public ResponseEntity<ApiResponse<JournalEntryGenerationResponse>> generateJournalEntries(
+            @Parameter(description = "合同ID", required = true)
+            @PathVariable Long id,
+            @Parameter(description = "会计分录生成请求", required = true)
+            @Valid @RequestBody JournalEntryGenerationRequest request) {
+        
+        log.info("生成会计分录: id={}, contractId={}", id, request.getContractInfo().getContractId());
+        JournalEntryGenerationResponse data = contractService.generateJournalEntries(id, request);
+        return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.success(data));
+    }
+
+    /**
+     * 查询合同会计分录
+     */
+    @GetMapping("/{id}/journal-entries")
+    @Operation(summary = "查询合同会计分录", description = "根据合同ID查询所有相关的会计分录，包含分录明细和汇总统计信息")
+    public ResponseEntity<ApiResponse<JournalEntryQueryResponse>> getJournalEntriesByContractId(
             @Parameter(description = "合同ID", required = true)
             @PathVariable Long id) {
         
-        log.info("生成会计分录: id={}", id);
-        contractService.generateJournalEntries(id);
-        return ResponseEntity.accepted().build();
+        log.info("查询合同会计分录: id={}", id);
+        JournalEntryQueryResponse data = contractService.getJournalEntriesByContractId(id);
+        return ResponseEntity.ok(ApiResponse.success(data));
     }
 }
